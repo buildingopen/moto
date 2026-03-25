@@ -24,6 +24,8 @@ Never run a cron job bare. Always wrap with `safe-pipeline` (or at minimum `floc
 - `safe-pipeline` - for cron jobs (adds flock on top of timeout + cgroup)
 - `safe-run` - for interactive one-off heavy commands (timeout + cgroup, no flock)
 
+Both scripts live in `server/safety/` in this repo. They need to be installed to a location on `$PATH` (e.g., `/usr/local/bin/`) so cron jobs and interactive shells can find them. The repo's `install.sh` handles this, or you can copy them manually.
+
 ## flock: prevent overlapping runs
 
 If you cannot use `safe-pipeline`, use `flock` directly:

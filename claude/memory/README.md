@@ -6,6 +6,8 @@ The memory system is Claude Code's external brain. It persists knowledge across 
 
 Every Claude conversation automatically loads **MEMORY.md** (first ~200 lines) into the system context. This happens before your task begins.
 
+**Path:** MEMORY.md lives at `~/.claude/projects/<project-hash>/memory/MEMORY.md` (Claude Code's project-scoped directory), not at `~/.claude/memory/`. Each project gets its own memory directory based on a hash of the project path.
+
 ## How to Use Memory
 
 ### MEMORY.md (The Index)
@@ -88,5 +90,7 @@ claude/memory/
 - **`recall_search`** - Search session transcripts across all conversations
 - **`recall_recent`** - Get last N messages from any previous session
 - **`recall_report`** - Analyze error patterns, retries, corrections
+
+These `recall_*` MCP tools require `session-recall` to be installed: `npm install -g session-recall`. Without it, you can still search transcripts manually with `grep` in `~/.claude/projects/*/`.
 
 See `~/.claude/projects/*/` for raw JSONL transcripts (never deleted by compaction).

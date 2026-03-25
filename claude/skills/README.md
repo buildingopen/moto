@@ -22,6 +22,8 @@ Claude reads ALL skill descriptions at startup to know what's available. The bod
 
 ## How to Install
 
+If you use the repo's `install.sh` script, skills are installed automatically. Manual copying is only needed if you are not using the installer.
+
 Copy the skill directory into `~/.claude/commands/`:
 
 ```bash

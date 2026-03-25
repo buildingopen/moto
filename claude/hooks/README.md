@@ -125,3 +125,7 @@ echo $?  # Should print 0 (approved)
 | `gemini-audit.sh` | Stop | Wrapper: opt-in Gemini quality gate |
 | `gemini-audit.py` | Stop | Gemini independent audit implementation |
 | `block-wa-send.sh` | PreToolUse (Bash) | Block unverified WhatsApp sends through gateway |
+
+**Note on `block-wa-send.sh`:** This hook is included as a reference but is NOT wired into `settings.json` by default. It is an optional hook for users who run a WhatsApp gateway (e.g., OpenClaw/Clawdbot). To enable it, add a PreToolUse entry for it in your `settings.json` manually.
+
+**Inline hooks in settings.json:** The default `settings.json` also includes a PostToolUse hook that is not a separate file: an inline `jq` command that logs every Bash command to `~/.claude/bash-commands.jsonl`. This is wired directly in `settings.json` as a `"command"` string rather than a standalone script file.

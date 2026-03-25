@@ -1,166 +1,251 @@
 # claude-setup
 
-A battle-tested Claude Code configuration for developers who use Claude as their primary coding partner. Includes CLAUDE.md templates, safety hooks, 30+ skills, server infrastructure, browser automation, WhatsApp/Gmail integration, and terminal workflow tools.
+### Production-grade Claude Code configuration, extracted from 500+ real sessions
 
-This is the full stack that powers a real production workflow, open-sourced and templated for reuse.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-blueviolet)](https://docs.anthropic.com/en/docs/claude-code)
 
-## What's Included
+A complete Claude Code developer setup: CLAUDE.md templates, 12 safety hooks, 30+ skills, server infrastructure, terminal workflow, WhatsApp/Gmail integration, memory system, and cost tracking. Everything is templated for reuse with no personal data.
 
-| Directory | What | Why |
-|-----------|------|-----|
-| `claude/` | CLAUDE.md templates, hooks, scripts, skills, memory system | The core Claude Code config |
-| `server/` | Systemd services, safety utilities, browser automation, tmux/bash | Dev server infrastructure |
-| `whatsapp/` | OpenClaw gateway, verified send, SQLite contact lookup | WhatsApp messaging integration |
-| `gmail/` | IMAP integration, multi-account email checking | Email access for Claude |
-| `cron/` | Job templates, health checks, safe-pipeline usage | Recurring task automation |
+---
+
+## Who is this for?
+
+- **Solo developers** using Claude Code daily who want battle-tested guardrails and productivity patterns
+- **Teams** standardizing their Claude Code configuration across projects and machines
+- **Anyone who's been burned** by Claude running `rm -rf`, pushing secrets, or claiming "should work" without verifying
+
+## What makes this different?
+
+Most Claude Code configs share a single CLAUDE.md. This repo shares the **full stack**: the hooks that enforce the rules, the skills that automate workflows, the server infrastructure that runs it all, and the memory system that makes Claude learn across sessions. Every pattern is extracted from real production use, not hypothetical best practices.
+
+---
+
+## Table of Contents
+
+- [Quick Start](#quick-start)
+- [What's Included](#whats-included)
+- [CLAUDE.md Templates](#claudemd-templates)
+- [Safety Hooks](#safety-hooks)
+- [Skills (30+)](#skills-30)
+- [Memory System](#memory-system)
+- [Server Infrastructure](#server-infrastructure)
+- [WhatsApp & Gmail Integration](#whatsapp--gmail-integration)
+- [Architecture](#architecture)
+- [Requirements](#requirements)
+- [Configuration](#configuration)
+- [Related Projects](#related-projects)
+
+---
 
 ## Quick Start
 
 ```bash
 git clone https://github.com/buildingopen/claude-setup.git
 cd claude-setup
-./install.sh
+./install.sh          # Symlinks configs into ~/.claude/
 ```
 
-The install script symlinks configs into `~/.claude/` and prompts for environment variables.
+That's it. The installer detects existing configs, backs them up, resolves `$HOME` paths in hook commands, and installs 12 hooks + 5 scripts + 30 skills + memory template. Run `./install.sh --copy` for standalone files instead of symlinks.
 
-## Core Components
+**After install:**
+1. Edit `~/.claude/CLAUDE.md` to match your workflow (search for `<!-- Customize -->` comments)
+2. Copy `claude/CLAUDE-project.md` into your project roots
+3. Optionally copy `.env.example` to `.env` for API keys used by some hooks/scripts
 
-### CLAUDE.md Templates
+---
 
-Two templates that encode months of iteration on how to make Claude Code reliable:
+## What's Included
 
-- **`claude/CLAUDE.md`** - Global config (`~/.claude/CLAUDE.md`). Engineering principles, self-audit checklist, error recovery patterns, communication standards, quality gates. This is the file that makes Claude stop saying "should work" and start verifying.
-- **`claude/CLAUDE-project.md`** - Per-project template. Tech stack, key files, testing conventions, deployment config. Drop into any project root.
+| Directory | Contents | Purpose |
+|-----------|----------|---------|
+| [`claude/`](claude/) | CLAUDE.md, hooks, scripts, skills, memory | Core Claude Code configuration |
+| [`server/`](server/) | Systemd services, safety utils, browser automation, tmux | Dev server infrastructure |
+| [`whatsapp/`](whatsapp/) | OpenClaw gateway, verified send, SQLite contact lookup | WhatsApp messaging integration |
+| [`gmail/`](gmail/) | IMAP checker, multi-account support | Email access for Claude |
+| [`cron/`](cron/) | Job templates, health checks, safe-pipeline patterns | Recurring task automation |
 
-Key patterns in the global CLAUDE.md:
-- **Read First, Code Later** - 80% reading, 20% writing. No code changes without understanding context.
-- **Self-Audit** - No completion claims without fresh verification evidence. BANNED: "should work now"
-- **Rationalization Red Flags** - Table of thoughts that signal the agent is about to skip process
-- **Error Recovery** - Data-driven rules from 10,000+ error analysis (e.g., never retry a blocked hook)
-- **Ripple Check** - After every change, audit the diff for env vars, dependencies, breaking changes
+---
 
-### Safety Hooks
+## CLAUDE.md Templates
 
-12 hooks that prevent Claude from doing damage. Wired into `settings.json` and triggered automatically.
+Two templates encoding months of iteration on making Claude Code reliable:
 
-| Hook | Event | What It Does |
-|------|-------|-------------|
-| `block-destructive.sh` | PreToolUse (Bash) | Blocks `rm -rf /`, `git reset --hard`, `DROP TABLE`, `curl\|bash` |
+- **[`claude/CLAUDE.md`](claude/CLAUDE.md)** - Global config (`~/.claude/CLAUDE.md`). Drop-in template with engineering principles, self-audit checklist, error recovery, communication standards, and quality gates.
+- **[`claude/CLAUDE-project.md`](claude/CLAUDE-project.md)** - Per-project config. Tech stack, key files, testing conventions, deploy config. Copy into any project root.
+
+<details>
+<summary><strong>Key patterns in the global CLAUDE.md</strong></summary>
+
+| Pattern | What it does |
+|---------|-------------|
+| **Read First, Code Later** | 80% reading, 20% writing. No changes without understanding context first. |
+| **Self-Audit** | No completion claims without fresh verification evidence. Bans "should work now". |
+| **Rationalization Red Flags** | Table of thoughts that signal the agent is about to skip process. |
+| **Error Recovery** | Data-driven rules from 10,000+ error analysis (e.g., never retry a blocked hook). |
+| **Ripple Check** | After every change, audit the diff for env vars, dependencies, breaking changes. |
+| **Quality Gate** | Do not return until genuinely 10/10. List flaws before scoring. |
+
+</details>
+
+---
+
+## Safety Hooks
+
+12 hooks wired into `settings.json` that prevent Claude from doing damage. They run automatically on every tool call.
+
+| Hook | Trigger | What It Does |
+|------|---------|-------------|
+| `block-destructive.sh` | Bash | Blocks `rm -rf /`, `git reset --hard`, `DROP TABLE`, `curl\|bash` |
+| `protect-sensitive-files.sh` | Write/Edit | Blocks writes to `.pem`, `.key`, `id_rsa`, credentials |
+| `protect-config-files.sh` | Write/Edit | Blocks editing linter/formatter configs to bypass checks |
+| `scan-secrets-before-push.sh` | Bash | Runs gitleaks before `git push` |
+| `enforce-package-manager.sh` | Bash | Detects lock file, blocks wrong package manager |
+| `enforce-server-routing.sh` | Bash | Blocks CPU-heavy tasks locally, routes to dev server |
+| `suggest-compact.sh` | Edit/Write/Bash | Counts tool calls, suggests `/compact` at threshold |
+| `post-compaction-recall.sh` | Any | Detects post-compaction state, suggests session-recall |
 | `cost-tracker.sh` | Stop | Tracks token costs per model/session to `costs.jsonl` |
-| `protect-sensitive-files.sh` | PreToolUse (Write/Edit) | Blocks writes to `.pem`, `.key`, `id_rsa`, credentials |
-| `protect-config-files.sh` | PreToolUse (Write/Edit) | Blocks editing linter/formatter configs to bypass checks |
-| `scan-secrets-before-push.sh` | PreToolUse (Bash) | Runs gitleaks before `git push` |
-| `enforce-package-manager.sh` | PreToolUse (Bash) | Detects lock file, blocks wrong package manager |
-| `suggest-compact.sh` | PreToolUse (Edit/Write/Bash) | Counts tool calls, suggests `/compact` at threshold |
-| `post-compaction-recall.sh` | PreToolUse (any) | Detects post-compaction, suggests session-recall |
-| `enforce-server-routing.sh` | PreToolUse (Bash) | Blocks CPU-heavy tasks locally, routes to dev server |
-| `gemini-audit.sh` + `.py` | Stop | Opt-in Gemini quality gate: scores output 1-10, blocks if < 10 |
-| `block-wa-send.sh` | PreToolUse (Bash) | Blocks unverified WhatsApp sends |
+| `gemini-audit.sh` + `.py` | Stop | Opt-in Gemini quality gate: scores output, blocks if < 10 |
+| `block-wa-send.sh` | Bash | Blocks unverified WhatsApp sends (optional, not wired by default) |
 
-See [`claude/hooks/README.md`](claude/hooks/README.md) for setup instructions.
+All hooks are pure bash (no external deps beyond `jq`). See [`claude/hooks/README.md`](claude/hooks/README.md) for how hooks work, the JSON protocol, and how to wire them in `settings.json`.
 
-### Scripts
+**Scripts included:**
 
-| Script | What It Does |
-|--------|-------------|
-| `gemini-fetch.sh` | Fetch blocked URLs via Gemini API (fallback for WebFetch) |
+| Script | Purpose |
+|--------|---------|
+| `gemini-fetch.sh` | Fetch blocked URLs via Gemini API (WebFetch fallback) |
 | `claude-auto-resume.sh` | Auto-retry on rate limits with exponential backoff |
-| `claude-rate-limit-watcher.sh` | Background daemon monitoring for rate limits |
+| `claude-rate-limit-watcher.sh` | Background rate limit monitor daemon |
 | `claude-switch.sh` | Switch between multiple Claude accounts |
 | `sync-claude-config.sh` | Sync CLAUDE.md across machines via SCP |
 
-### Skills (30+)
+---
 
-Reusable slash commands that extend Claude's capabilities. Each skill is a `.md` file with specialized prompts and workflows.
+## Skills (30+)
 
-**Shipping & QA:** bouncer (Gemini quality gate), ship (pre-merge workflow), qa (autonomous testing), debug (systematic debugging)
+Slash commands that extend Claude's capabilities. Each skill is a `SKILL.md` file installed to `~/.claude/commands/`. Invoke with `/skill-name` or let Claude detect and use them automatically.
 
-**Planning & Review:** retro (weekly retrospective), compass (strategic planning), blast-radius (impact analysis), deep-audit (full repo audit via Gemini)
+<details>
+<summary><strong>Full skill list by category</strong></summary>
 
-**Document Generation:** pdf, docx, pptx, xlsx manipulation
+**Shipping & QA:**
+`bouncer` (Gemini quality gate), `ship` (pre-merge workflow), `qa` (autonomous testing), `debug` (systematic debugging), `target-loop` (verified iteration engine)
 
-**Design & Content:** frontend-design, slide-design, canvas-design, algorithmic-art, linkedin-copy, cold-outreach
+**Planning & Review:**
+`retro` (weekly retrospective), `compass` (strategic planning), `blast-radius` (impact analysis), `deep-audit` (full repo audit via Gemini), `cost` (token spend reporting)
 
-**Infrastructure:** deploy (multi-project), email-check (IMAP), mcp-builder, webapp-testing, browse (browser automation)
+**Document Generation:**
+`pdf`, `docx`, `pptx`, `xlsx` manipulation
 
-**Meta:** skill-creator (create new skills), subagent-templates, new-project (scaffolding), target-loop (verified iteration), doc-coauthoring
+**Design & Content:**
+`frontend-design`, `slide-design`, `canvas-design`, `algorithmic-art`, `linkedin-copy`, `cold-outreach`
 
-See [`claude/skills/README.md`](claude/skills/README.md) for the full list and how to create your own.
+**Infrastructure:**
+`deploy` (multi-project), `email-check` (IMAP), `mcp-builder`, `webapp-testing`, `browse` (browser automation)
 
-### Memory System
+**Meta:**
+`skill-creator` (create new skills), `subagent-templates`, `new-project` (scaffolding), `doc-coauthoring`, `workplan` (multi-step task planning)
 
-An external brain pattern that persists knowledge across Claude sessions:
+</details>
 
-- **`MEMORY.md`** - Concise index file (< 200 lines) loaded into every conversation
-- **Topic files** - Detailed notes on specific subjects (e.g., `whatsapp-reading.md`, `visual-verification.md`)
-- Claude auto-updates these files as it learns your preferences, discovers patterns, and receives corrections
+See [`claude/skills/README.md`](claude/skills/README.md) for the full list, SKILL.md format, and how to create your own.
 
-See [`claude/memory/README.md`](claude/memory/README.md) for the pattern.
+---
 
-### Server Infrastructure
+## Memory System
 
-Templates for running Claude Code on a dedicated dev server:
+An external brain pattern that persists knowledge across Claude Code sessions:
 
-- **Systemd services** - Chrome headless with CDP, SSHFS mounts, CDP keepalive
-- **Safety utilities** - `safe-pipeline` (flock + timeout + cgroup memory cap), `safe-run`, process cleanup
-- **Browser automation** - Chrome CDP setup, bridge keeper for session persistence
+- **`MEMORY.md`** - Concise index (< 200 lines) auto-loaded into every conversation
+- **Topic files** - Detailed notes on specific subjects, read on demand
+- Claude auto-updates these as it learns preferences, patterns, and corrections
+
+This prevents Claude from repeating mistakes across sessions and lets it build on prior context. See [`claude/memory/README.md`](claude/memory/README.md) for the full pattern.
+
+---
+
+## Server Infrastructure
+
+Templates for running Claude Code on a dedicated dev server (VPS/dedicated). Not needed for local-only setups.
+
+<details>
+<summary><strong>What's in server/</strong></summary>
+
+- **Systemd services** - Chrome headless with CDP, SSHFS mounts, CDP keepalive, Docker-host proxy
+- **Safety utilities** - `safe-pipeline` (flock + timeout + cgroup memory cap), `safe-run`, stale process cleanup
+- **Browser automation** - Chrome CDP setup guide, bridge keeper for session persistence
 - **Multi-account management** - GitHub, Render, Supabase account switching patterns
-- **Terminal workflow** - tmux config, bashrc with 999K history, background task queue
+- **Terminal workflow** - tmux config, bashrc (999K history, aliases), background task queue system
 
-### WhatsApp Integration
+</details>
 
-Send and read WhatsApp messages through Claude via the OpenClaw gateway:
+---
 
-- Docker-based WhatsApp Web gateway
+## WhatsApp & Gmail Integration
+
+**WhatsApp** (via [OpenClaw](https://github.com/nicokant/openclaw) gateway):
+- Docker-based WhatsApp Web bridge
 - Verified send script with SQLite contact lookup (prevents wrong-number sends)
 - Direct SQLite DB reading for message history
 
-### Gmail Integration
+**Gmail** (via IMAP):
+- Multi-account email checking
+- Preserves read/unread status (`BODY.PEEK[]` instead of `RFC822`)
+- Standalone Python script, stdlib only, no pip dependencies
 
-Check email across multiple IMAP accounts:
-
-- Multi-account IMAP integration
-- Preserves read/unread status (`BODY.PEEK[]`)
-- Standalone email checker script
+---
 
 ## Architecture
 
 ```
 ~/.claude/
-  CLAUDE.md          -> claude/CLAUDE.md (global config)
-  settings.json      -> claude/settings.json (hooks + permissions)
-  .mcp.json          -> claude/.mcp.json (MCP servers)
-  hooks/             -> claude/hooks/ (safety hooks)
-  scripts/           -> claude/scripts/ (utilities)
-  commands/          -> claude/skills/ (slash commands)
-  metrics/           -> cost tracking output
-  memory/            -> external brain (MEMORY.md + topic files)
+  CLAUDE.md          <- claude/CLAUDE.md (global config)
+  settings.json      <- claude/settings.json (hooks + permissions, $HOME resolved)
+  .mcp.json          <- claude/.mcp.json (MCP servers)
+  hooks/             <- claude/hooks/ (12 safety hooks)
+  scripts/           <- claude/scripts/ (5 utility scripts)
+  commands/          <- claude/skills/ (30+ slash commands)
+  metrics/           <- cost tracking output (costs.jsonl)
+  projects/*/memory/ <- external brain (MEMORY.md + topic files)
 
 your-project/
   CLAUDE.md          <- claude/CLAUDE-project.md (per-project config)
 ```
 
+---
+
 ## Requirements
 
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
-- `jq` (used by hooks)
-- `gitleaks` (optional, for secret scanning hook)
-- `python3` (for Gemini audit hook and some scripts)
-- A Gemini API key (optional, for gemini-fetch and gemini-audit)
+| Requirement | Required? | Used by |
+|-------------|-----------|---------|
+| [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) | Yes | Everything |
+| `jq` | Yes | All hooks (JSON parsing) |
+| `python3` | Optional | Gemini audit hook, email checker |
+| `gitleaks` | Optional | Secret scanning hook |
+| Gemini API key | Optional | `gemini-fetch.sh`, `gemini-audit` |
+
+---
 
 ## Configuration
 
-1. Copy `.env.example` to `.env` and fill in your values
-2. Edit `claude/CLAUDE.md` to match your workflow
-3. Update server SSH aliases in scripts if using multi-machine setup
-4. Replace `$HOME` paths in `settings.json` with your actual home directory (or let `install.sh` handle it)
+After running `install.sh`:
+
+1. **Edit CLAUDE.md** - Search for `<!-- Customize -->` comments and replace placeholders with your setup (server names, tool routing rules, project paths)
+2. **Add project configs** - Copy `claude/CLAUDE-project.md` to each project root and fill in the tech stack section
+3. **API keys** (optional) - Copy `.env.example` to `.env` for hooks/scripts that need external APIs
+
+The `settings.json` file has `$HOME` paths pre-resolved by the installer. If you update the repo's `settings.json`, re-run `./install.sh` to pick up changes.
+
+---
 
 ## Related Projects
 
-- [openclaw-setup](https://github.com/buildingopen/openclaw-setup) - WhatsApp gateway setup (subset of this repo)
-- [session-recall](https://www.npmjs.com/package/session-recall) - Recover context after Claude compaction
+- **[openclaw-setup](https://github.com/buildingopen/openclaw-setup)** - Standalone WhatsApp gateway setup guide (subset of this repo's `whatsapp/` directory)
+- **[session-recall](https://www.npmjs.com/package/session-recall)** - Recover context after Claude's automatic compaction
+
+---
 
 ## License
 
-MIT
+[MIT](LICENSE)

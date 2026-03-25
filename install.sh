@@ -65,14 +65,18 @@ install_dir() {
     local src="$1"
     local dst="$2"
 
-    mkdir -p "$dst"
     if [ "$MODE" = "--symlink" ]; then
-        # Symlink individual files, not the directory
+        # Symlink individual files and recurse into subdirectories
+        mkdir -p "$dst"
         for f in "$src"/*; do
-            [ -f "$f" ] && ln -sf "$f" "$dst/$(basename "$f")"
+            if [ -d "$f" ]; then
+                install_dir "$f" "$dst/$(basename "$f")"
+            elif [ -f "$f" ]; then
+                ln -sf "$f" "$dst/$(basename "$f")"
+            fi
         done
     else
-        cp -f "$src"/* "$dst/" 2>/dev/null || true
+        cp -rf "$src"/* "$dst/" 2>/dev/null || true
     fi
 }
 
@@ -90,7 +94,8 @@ fix_settings() {
         return
     fi
 
-    # Replace $HOME with actual home path
+    # Replace $HOME with actual home path (generates a standalone copy, not a symlink).
+    # Re-run install.sh after updating settings.json in the repo to pick up changes.
     sed "s|\\\$HOME|$HOME|g" "$src" > "$dst"
     ok "settings.json installed (with resolved \$HOME paths)"
 }
@@ -145,16 +150,15 @@ for skill_dir in "$SCRIPT_DIR"/claude/skills/*/; do
 done
 ok "$(ls -d "$SCRIPT_DIR"/claude/skills/*/ 2>/dev/null | wc -l | tr -d ' ') skills installed to ~/.claude/commands/"
 
-# Memory template
+# Memory template (installed to Claude Code's project-scoped memory directory)
 info "Installing memory template..."
-if [ ! -f "$CLAUDE_DIR/memory/MEMORY.md" ]; then
-    # Only install template if no existing MEMORY.md
-    project_dir="$CLAUDE_DIR/projects/-$(echo "$HOME" | tr '/' '-' | sed 's/^-//')/memory"
+project_dir="$CLAUDE_DIR/projects/-$(echo "$HOME" | tr '/' '-' | sed 's/^-//')/memory"
+if [ ! -f "$project_dir/MEMORY.md" ]; then
     mkdir -p "$project_dir"
     install_file "$SCRIPT_DIR/claude/memory/MEMORY.md" "$project_dir/MEMORY.md"
-    ok "MEMORY.md template installed"
+    ok "MEMORY.md template installed to $project_dir/"
 else
-    warn "MEMORY.md already exists, skipping (not overwriting your data)"
+    warn "MEMORY.md already exists at $project_dir/, skipping (not overwriting your data)"
 fi
 
 echo ""
