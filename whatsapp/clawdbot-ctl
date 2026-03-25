@@ -1,0 +1,60 @@
+#!/bin/bash
+# Clawdbot container control script
+# Install to /usr/local/bin/clawdbot-ctl and make executable
+
+COMPOSE_FILE="${CLAWDBOT_COMPOSE_FILE:-/opt/clawdbot/docker-compose.yml}"
+CONTAINER_NAME="${CLAWDBOT_CONTAINER:-clawdbot}"
+
+case "$1" in
+  start)
+    echo "Starting ${CONTAINER_NAME}..."
+    docker-compose -f "$COMPOSE_FILE" up -d
+    ;;
+  stop)
+    echo "Stopping ${CONTAINER_NAME}..."
+    # NOTE: 'stop' here uses docker-compose stop (not down) to avoid destroying the session.
+    # Use 'docker-compose -f ... down' only when you intend to fully reset.
+    docker-compose -f "$COMPOSE_FILE" stop
+    ;;
+  restart)
+    # SAFE: uses docker restart, not docker-compose down/up
+    # This preserves the WhatsApp session.
+    echo "Restarting ${CONTAINER_NAME} (session preserved)..."
+    docker restart "$CONTAINER_NAME"
+    ;;
+  logs)
+    docker-compose -f "$COMPOSE_FILE" logs -f
+    ;;
+  login)
+    echo "Starting WhatsApp login (scan QR code with your phone)..."
+    echo "On your phone: WhatsApp -> Settings -> Linked Devices -> Link a Device"
+    docker exec -it "$CONTAINER_NAME" openclaw channels login --channel whatsapp
+    ;;
+  status)
+    docker-compose -f "$COMPOSE_FILE" ps
+    docker exec "$CONTAINER_NAME" openclaw channels list 2>/dev/null || echo "Container not running"
+    ;;
+  send)
+    # WARNING: Use safe-wa-send instead of calling this directly.
+    # Direct send bypasses the contact-lookup safety check.
+    shift
+    docker exec "$CONTAINER_NAME" openclaw message send "$@"
+    ;;
+  *)
+    echo "Usage: clawdbot-ctl {start|stop|restart|logs|login|status|send}"
+    echo ""
+    echo "Commands:"
+    echo "  start   - Start clawdbot container"
+    echo "  stop    - Stop clawdbot container (session preserved)"
+    echo "  restart - Restart container (session preserved)"
+    echo "  logs    - View container logs"
+    echo "  login   - Link WhatsApp via QR code scan"
+    echo "  status  - Show container status and linked channels"
+    echo "  send    - Send message (prefer safe-wa-send over this)"
+    echo ""
+    echo "Environment variables:"
+    echo "  CLAWDBOT_COMPOSE_FILE  Path to docker-compose.yml (default: /opt/clawdbot/docker-compose.yml)"
+    echo "  CLAWDBOT_CONTAINER     Container name (default: clawdbot)"
+    exit 1
+    ;;
+esac

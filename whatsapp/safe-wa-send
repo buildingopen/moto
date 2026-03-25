@@ -1,0 +1,229 @@
+#!/bin/bash
+# Safe WhatsApp send via clawdbot-ctl
+# ALWAYS looks up the contact from WhatsApp SQLite DB first.
+# NEVER accepts raw phone numbers - only contact names.
+#
+# Usage:
+#   safe-wa-send "Contact Name" "message text"
+#       -> looks up contact, shows verification output, exits WITHOUT sending
+#
+#   safe-wa-send "Contact Name" "message text" --confirmed
+#       -> sends after a prior verification step approved it
+#
+# The two-step workflow prevents sending to wrong contacts.
+#
+# Required environment variables:
+#   WHATSAPP_DB_PATH      Path to WhatsApp ChatStorage.sqlite
+#                         (local path, or accessible via SSH_HOST below)
+#   SSH_HOST              (optional) SSH host alias to reach the machine with the DB
+#                         If set, the DB is queried over SSH instead of locally
+#   KNOWN_CONTACTS_FILE   (optional) fallback file with Name|PhoneNumber lines
+#                         Used when DB is unreachable
+
+set -euo pipefail
+
+CONTACT_NAME="${1:-}"
+MESSAGE="${2:-}"
+CONFIRMED="${3:-}"
+
+if [ -z "$CONTACT_NAME" ] || [ -z "$MESSAGE" ]; then
+  echo "Usage: safe-wa-send \"Contact Name\" \"message text\" [--confirmed]"
+  echo ""
+  echo "Step 1: Run without --confirmed to look up and verify the number"
+  echo "Step 2: Review the displayed phone number"
+  echo "Step 3: Run with --confirmed after explicit approval"
+  exit 1
+fi
+
+# Required: path to WhatsApp ChatStorage.sqlite
+WA_DB_PATH="${WHATSAPP_DB_PATH:?WHATSAPP_DB_PATH env var is required}"
+
+# Optional: SSH host if DB is on a remote machine
+SSH_HOST="${SSH_HOST:-}"
+
+# Optional: fallback known contacts file (Name|PhoneNumber per line)
+KNOWN_FILE="${KNOWN_CONTACTS_FILE:-}"
+
+# If --confirmed and contact is in known-contacts, skip DB lookup
+if [ "$CONFIRMED" = "--confirmed" ] && [ -n "$KNOWN_FILE" ] && [ -f "$KNOWN_FILE" ]; then
+  MATCH=$(grep -i "${CONTACT_NAME}" "$KNOWN_FILE" | head -1)
+  if [ -n "$MATCH" ]; then
+    NAME=$(echo "$MATCH" | cut -d'|' -f1)
+    PHONE=$(echo "$MATCH" | cut -d'|' -f2)
+    SEND_JID="${PHONE}@s.whatsapp.net"
+    echo "========================================="
+    echo "WHATSAPP SEND (using known contacts, --confirmed)"
+    echo "========================================="
+    echo "Contact:  $NAME"
+    echo "Send JID: $SEND_JID"
+    echo "Phone:    +$PHONE"
+    echo ""
+    echo "Sending via clawdbot-ctl..."
+    clawdbot-ctl send --target "$SEND_JID" --message "$MESSAGE"
+    echo "SENT."
+    exit 0
+  fi
+fi
+
+# Run a sqlite3 query against the WhatsApp DB (local or remote via SSH)
+query_wa_db() {
+  local sql="$1"
+  if [ -n "$SSH_HOST" ]; then
+    timeout 10 ssh "$SSH_HOST" "sqlite3 -separator '|' '${WA_DB_PATH}' \"${sql}\"" 2>/dev/null
+  else
+    timeout 10 sqlite3 -separator '|' "${WA_DB_PATH}" "${sql}" 2>/dev/null
+  fi
+}
+
+# Test connectivity (SSH or local file)
+check_db_accessible() {
+  if [ -n "$SSH_HOST" ]; then
+    timeout 5 ssh "$SSH_HOST" "echo ok" &>/dev/null
+  else
+    [ -f "$WA_DB_PATH" ]
+  fi
+}
+
+if ! check_db_accessible; then
+  # DB unreachable, fall back to known-contacts
+  if [ -n "$KNOWN_FILE" ] && [ -f "$KNOWN_FILE" ]; then
+    MATCH=$(grep -i "${CONTACT_NAME}" "$KNOWN_FILE" | head -1)
+    if [ -n "$MATCH" ]; then
+      NAME=$(echo "$MATCH" | cut -d'|' -f1)
+      PHONE=$(echo "$MATCH" | cut -d'|' -f2)
+      SEND_JID="${PHONE}@s.whatsapp.net"
+      if [ "$CONFIRMED" = "--confirmed" ]; then
+        echo "========================================="
+        echo "WHATSAPP SEND (DB unreachable, using known contacts)"
+        echo "========================================="
+        echo "Contact:  $NAME"
+        echo "Send JID: $SEND_JID"
+        echo "Phone:    +$PHONE"
+        echo ""
+        echo "Sending via clawdbot-ctl..."
+        clawdbot-ctl send --target "$SEND_JID" --message "$MESSAGE"
+        echo "SENT."
+        exit 0
+      else
+        echo "========================================="
+        echo "WHATSAPP SEND VERIFICATION (DB unreachable, using known contacts)"
+        echo "========================================="
+        echo "Contact:  $NAME"
+        echo "Send JID: $SEND_JID"
+        echo "Phone:    +$PHONE"
+        echo ""
+        echo "Message:"
+        echo "$MESSAGE"
+        echo "========================================="
+        echo ""
+        echo "NOT SENT. Verify the above and re-run with --confirmed."
+        echo "After approval, run: safe-wa-send \"$CONTACT_NAME\" \"<message>\" --confirmed"
+        exit 0
+      fi
+    fi
+  fi
+  echo "ERROR: WhatsApp DB is not accessible and contact not in known-contacts."
+  if [ -n "$SSH_HOST" ]; then
+    echo "Check: ssh $SSH_HOST"
+  else
+    echo "Check: WHATSAPP_DB_PATH=${WA_DB_PATH}"
+  fi
+  exit 1
+fi
+
+# Look up contact - prefer @s.whatsapp.net JIDs (phone-based) over @lid JIDs
+RESULTS=$(query_wa_db "SELECT ZCONTACTJID, ZPARTNERNAME FROM ZWACHATSESSION WHERE ZPARTNERNAME = '${CONTACT_NAME}' AND ZCONTACTJID LIKE '%@s.whatsapp.net' LIMIT 5;")
+if [ -z "$RESULTS" ]; then
+  RESULTS=$(query_wa_db "SELECT ZCONTACTJID, ZPARTNERNAME FROM ZWACHATSESSION WHERE ZPARTNERNAME LIKE '%${CONTACT_NAME}%' AND ZCONTACTJID LIKE '%@s.whatsapp.net' LIMIT 5;")
+fi
+# Fallback to @lid if no phone JID found
+if [ -z "$RESULTS" ]; then
+  RESULTS=$(query_wa_db "SELECT ZCONTACTJID, ZPARTNERNAME FROM ZWACHATSESSION WHERE ZPARTNERNAME = '${CONTACT_NAME}' AND ZCONTACTJID NOT LIKE '%@status' LIMIT 5;")
+fi
+if [ -z "$RESULTS" ]; then
+  RESULTS=$(query_wa_db "SELECT ZCONTACTJID, ZPARTNERNAME FROM ZWACHATSESSION WHERE ZPARTNERNAME LIKE '%${CONTACT_NAME}%' AND ZCONTACTJID NOT LIKE '%@status' LIMIT 5;")
+fi
+
+if [ -z "$RESULTS" ]; then
+  echo "ERROR: No WhatsApp contact found matching '$CONTACT_NAME'"
+  echo ""
+  echo "Recent contacts in DB (last 20 by message date):"
+  query_wa_db "SELECT ZPARTNERNAME, ZCONTACTJID FROM ZWACHATSESSION WHERE ZPARTNERNAME IS NOT NULL AND ZPARTNERNAME != '' ORDER BY ZLASTMESSAGEDATE DESC LIMIT 20;"
+  exit 1
+fi
+
+# Count matches
+MATCH_COUNT=$(echo "$RESULTS" | wc -l)
+
+if [ "$MATCH_COUNT" -gt 1 ]; then
+  echo "MULTIPLE MATCHES found for '$CONTACT_NAME':"
+  echo "$RESULTS" | while IFS='|' read -r jid name; do
+    echo "  - $name: $jid"
+  done
+  echo ""
+  echo "Use a more specific name to get a single match."
+  exit 1
+fi
+
+# Single match
+JID=$(echo "$RESULTS" | cut -d'|' -f1)
+NAME=$(echo "$RESULTS" | cut -d'|' -f2)
+
+# If the JID is a @lid (not a phone number), try to resolve the phone
+if echo "$JID" | grep -q '@lid'; then
+  PHONE_JID=$(query_wa_db "
+    SELECT DISTINCT m.ZFROMJID FROM ZWAMESSAGE m
+    JOIN ZWACHATSESSION c ON m.ZCHATSESSION = c.Z_PK
+    WHERE c.ZCONTACTJID = '${JID}'
+    AND m.ZFROMJID LIKE '%@s.whatsapp.net'
+    LIMIT 1;
+  ")
+  if [ -n "$PHONE_JID" ]; then
+    PHONE=$(echo "$PHONE_JID" | sed 's/@s.whatsapp.net//')
+  else
+    # Check known-contacts as last resort
+    if [ -n "$KNOWN_FILE" ] && [ -f "$KNOWN_FILE" ]; then
+      PHONE=$(grep -i "${NAME}" "$KNOWN_FILE" | head -1 | cut -d'|' -f2)
+    fi
+    if [ -z "${PHONE:-}" ]; then
+      echo "WARNING: Only a @lid JID was found ($JID). Could not resolve phone number."
+      echo "@lid JIDs may silently fail or reach the wrong contact."
+      if [ -n "$KNOWN_FILE" ]; then
+        echo "Add this contact to $KNOWN_FILE as: Name|PhoneNumber"
+      else
+        echo "Set KNOWN_CONTACTS_FILE and add an entry: Name|PhoneNumber"
+      fi
+      exit 1
+    fi
+  fi
+else
+  PHONE=$(echo "$JID" | sed 's/@s.whatsapp.net//')
+fi
+
+# Always send using the phone@s.whatsapp.net format
+SEND_JID="${PHONE}@s.whatsapp.net"
+
+echo "========================================="
+echo "WHATSAPP SEND VERIFICATION"
+echo "========================================="
+echo "Contact:  $NAME"
+echo "DB JID:   $JID"
+echo "Send JID: $SEND_JID"
+echo "Phone:    +$PHONE"
+echo ""
+echo "Message:"
+echo "$MESSAGE"
+echo "========================================="
+
+if [ "$CONFIRMED" != "--confirmed" ]; then
+  echo ""
+  echo "NOT SENT. Verify the above and re-run with --confirmed."
+  echo "After approval, run: safe-wa-send \"$CONTACT_NAME\" \"<message>\" --confirmed"
+  exit 0
+fi
+
+# Send
+echo ""
+echo "Sending via clawdbot-ctl..."
+clawdbot-ctl send --target "$SEND_JID" --message "$MESSAGE"
+echo "SENT."

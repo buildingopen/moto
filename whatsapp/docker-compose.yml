@@ -1,0 +1,24 @@
+version: '3.8'
+services:
+  clawdbot:
+    image: clawdbot:latest
+    container_name: clawdbot
+    ports:
+      - "${GATEWAY_PORT:-19000}:19000"
+    volumes:
+      - ${CLAWDBOT_DATA_DIR}:/root/.clawdbot
+      - ${CLAWDBOT_DATA_DIR}:/root/.openclaw
+    env_file:
+      - .env
+    deploy:
+      resources:
+        limits:
+          memory: ${MEMORY_LIMIT:-4G}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+    stdin_open: true
+    tty: true

@@ -1,0 +1,50 @@
+# Example crontab with safe-pipeline wrapping
+# Install: crontab -e (for user cron) or /etc/cron.d/my-service (for system cron)
+#
+# All jobs are wrapped in safe-pipeline which provides:
+#   1. flock (no overlapping runs)
+#   2. cgroup memory cap (prevents runaway memory)
+#   3. timeout (kills jobs that run too long)
+#
+# If safe-pipeline is not available, use the flock pattern shown below.
+#
+# Syntax:
+#   ┌───────── minute (0 - 59)
+#   │ ┌───────── hour (0 - 23)
+#   │ │ ┌───────── day of month (1 - 31)
+#   │ │ │ ┌───────── month (1 - 12)
+#   │ │ │ │ ┌───────── day of week (0 - 7, 0 and 7 = Sunday)
+#   │ │ │ │ │
+#   * * * * *  command
+
+SHELL=/bin/bash
+CRON_TZ=UTC
+
+# --- Health checks (every 5 minutes) ---
+*/5 * * * * safe-pipeline /usr/local/bin/health-check.sh >> /var/log/health-check.log 2>&1
+
+# --- Orphan process cleanup (every 10 minutes) ---
+*/10 * * * * safe-pipeline /usr/local/bin/kill-stale-processes.sh >> /var/log/kill-stale.log 2>&1
+
+# --- Database backup (daily at 02:00 UTC) ---
+0 2 * * * safe-pipeline /usr/local/bin/backup-db.sh >> /var/log/backup-db.log 2>&1
+
+# --- Weekly backup verification (Sundays at 03:00 UTC) ---
+# Verify the most recent backup is non-empty and recent.
+0 3 * * 0 safe-pipeline bash -c 'LATEST=$(ls -t /var/backups/db/*.sql.gz 2>/dev/null | head -1); if [ -z "$LATEST" ]; then echo "$(date): ERROR no backups found"; exit 1; fi; AGE=$(( ($(date +%s) - $(stat -c %Y "$LATEST")) / 3600 )); if [ $AGE -gt 48 ]; then echo "$(date): ERROR backup is ${AGE}h old"; exit 1; fi; echo "$(date): backup OK: $LATEST (${AGE}h old)"' >> /var/log/backup-verify.log 2>&1
+
+# --- Log rotation (daily at 04:00 UTC) ---
+# Keep logs from growing unbounded by pruning old lines.
+0 4 * * * safe-pipeline bash -c 'for f in /var/log/health-check.log /var/log/backup-db.log /var/log/kill-stale.log; do [ -f "$f" ] && [ "$(stat -c%s "$f")" -gt $((5 * 1024 * 1024)) ] && tail -n 5000 "$f" > "${f}.tmp" && mv "${f}.tmp" "$f" && echo "$(date): rotated $f"; done' >> /var/log/log-rotation.log 2>&1
+
+# --- Example: job WITHOUT safe-pipeline (using flock directly) ---
+# Use this pattern if safe-pipeline is not installed.
+# flock -n acquires the lock non-blocking: skips the run if lock is held.
+# timeout 30m kills the job if it runs longer than 30 minutes.
+#
+# */15 * * * * flock -n /var/lock/my-script.lock timeout 30m /usr/local/bin/my-script.sh >> /var/log/my-script.log 2>&1
+
+# --- Example: pipeline job with environment variables ---
+# Pass a .env file or set vars inline.
+#
+# 0 1 * * * safe-pipeline bash -c 'set -a; source /opt/my-service/.env; set +a; /usr/local/bin/my-pipeline.sh' >> /var/log/my-pipeline.log 2>&1
