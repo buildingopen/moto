@@ -1,0 +1,18 @@
+#!/bin/bash
+# safe-pipeline: flock (no overlap) + timeout + memory cgroup
+#
+# Usage: safe-pipeline <command> [args...]
+# Env:   PIPELINE_TIMEOUT=2h  (default: 2h)
+#
+# Requires: memory-guard.slice installed in systemd
+#
+# How it works:
+#   1. Creates a lock file based on an md5 of the command string
+#   2. flock -n exits immediately if another instance holds the lock
+#   3. timeout kills the command after PIPELINE_TIMEOUT
+#   4. systemd-run places the process in memory-guard.slice
+
+LOCK_NAME=$(echo "$*" | md5sum | cut -c1-8)
+LOCK_FILE="/tmp/pipeline-${LOCK_NAME}.lock"
+TIMEOUT="${PIPELINE_TIMEOUT:-2h}"
+exec flock -n "$LOCK_FILE" timeout "$TIMEOUT" systemd-run --quiet --scope --slice=memory-guard.slice -- "$@"

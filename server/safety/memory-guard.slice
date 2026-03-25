@@ -1,0 +1,14 @@
+[Unit]
+Description=Memory guard for non-essential workloads
+
+[Slice]
+# Tune these values to match your server's available RAM.
+# MemoryHigh: soft limit - processes start getting throttled above this
+# MemoryMax:  hard limit - processes are OOM-killed above this
+#
+# Example values for common server sizes:
+#   16GB server: MemoryHigh=12G  MemoryMax=16G
+#   32GB server: MemoryHigh=20G  MemoryMax=24G
+#   64GB server: MemoryHigh=40G  MemoryMax=48G
+MemoryMax=16G
+MemoryHigh=12G

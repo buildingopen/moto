@@ -1,0 +1,7 @@
+[Unit]
+Description=Check and remount stale SSHFS mounts
+
+[Service]
+Type=oneshot
+# Point this at your mount health check script
+ExecStart=/usr/local/bin/check-remote-mounts

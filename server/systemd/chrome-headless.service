@@ -1,0 +1,31 @@
+[Unit]
+Description=Chrome headless with CDP on $CDP_PORT
+After=network.target
+
+[Service]
+Type=simple
+# Start a virtual framebuffer if not already running
+ExecStartPre=/bin/bash -c "pgrep -f \"Xvfb :99\" || (Xvfb :99 -screen 0 1920x1080x24 &)"
+ExecStartPre=/bin/sleep 1
+# Set CDP_PORT and CHROME_PROFILE_DIR in an EnvironmentFile or override in a drop-in
+ExecStart=/usr/bin/google-chrome-stable \
+  --remote-debugging-port=${CDP_PORT} \
+  --remote-allow-origins=* \
+  --user-data-dir=${CHROME_PROFILE_DIR} \
+  --no-first-run \
+  --no-default-browser-check \
+  --disable-background-timer-throttling \
+  --disable-backgrounding-occluded-windows \
+  --disable-renderer-backgrounding \
+  --no-sandbox \
+  --disable-popup-blocking \
+  --start-maximized
+Environment=DISPLAY=:99
+# Replace these with your values or use an EnvironmentFile
+Environment=CDP_PORT=9222
+Environment=CHROME_PROFILE_DIR=/opt/chrome-profiles/default
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

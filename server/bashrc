@@ -1,0 +1,150 @@
+# ~/.bashrc - Generic template for Claude Code dev server
+#
+# Sanitized from a production dev server setup.
+# Personal aliases, project paths, and API keys removed.
+# Add your own in a ~/.bash_aliases or ~/.bash_local file.
+
+# If not running interactively, don't do anything
+case $- in
+    *i*) ;;
+      *) return;;
+esac
+
+# --- History ---
+# Don't store duplicates or lines starting with a space
+HISTCONTROL=ignoreboth
+# Append to history file, don't overwrite
+shopt -s histappend
+# Large history (useful for Claude Code sessions that generate many commands)
+HISTSIZE=999999
+HISTFILESIZE=999999
+
+# Update LINES/COLUMNS after each command
+shopt -s checkwinsize
+
+# Lesspipe: better handling of non-text files
+[ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
+
+# Chroot identifier (used in prompt below)
+if [ -z "${debian_chroot:-}" ] && [ -r /etc/debian_chroot ]; then
+    debian_chroot=$(cat /etc/debian_chroot)
+fi
+
+# --- Prompt ---
+case "$TERM" in
+    xterm-color|*-256color) color_prompt=yes;;
+esac
+
+force_color_prompt=yes
+
+if [ -n "$force_color_prompt" ]; then
+    if [ -x /usr/bin/tput ] && tput setaf 1 >&/dev/null; then
+        color_prompt=yes
+    else
+        color_prompt=
+    fi
+fi
+
+if [ "$color_prompt" = yes ]; then
+    # Colorful prompt: user@host dir $
+    PS1='${debian_chroot:+($debian_chroot)}\[\033[01;31m\]\u\[\033[01;33m\]@\[\033[01;36m\]\h \[\033[01;33m\]\w \[\033[01;35m\]\$ \[\033[00m\]'
+else
+    PS1='${debian_chroot:+($debian_chroot)}\u@\h:\w\$ '
+fi
+unset color_prompt force_color_prompt
+
+# Set terminal title to user@host:dir
+case "$TERM" in
+xterm*|rxvt*)
+    PS1="\[\e]0;${debian_chroot:+($debian_chroot)}\u@\h: \w\a\]$PS1"
+    ;;
+esac
+
+# --- Color support for common commands ---
+if [ -x /usr/bin/dircolors ]; then
+    test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
+    alias ls='ls --color=auto'
+    alias grep='grep --color=auto'
+    alias fgrep='fgrep --color=auto'
+    alias egrep='egrep --color=auto'
+fi
+
+# --- Standard aliases ---
+alias ll='ls -alF'
+alias la='ls -A'
+alias l='ls -CF'
+
+# Alert alias for long running commands (usage: sleep 10; alert)
+alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo error)" "$(history|tail -n1|sed -e '\''s/^\s*[0-9]\+\s*//;s/[;&|]\s*alert$//'\'')"'
+
+# --- Local aliases ---
+# Source ~/.bash_aliases if it exists (for personal/project-specific aliases)
+if [ -f ~/.bash_aliases ]; then
+    . ~/.bash_aliases
+fi
+
+# Source local overrides (machine-specific, not tracked in git)
+if [ -f ~/.bash_local ]; then
+    . ~/.bash_local
+fi
+
+# --- Bash completion ---
+if ! shopt -oq posix; then
+  if [ -f /usr/share/bash-completion/bash_completion ]; then
+    . /usr/share/bash-completion/bash_completion
+  elif [ -f /etc/bash_completion ]; then
+    . /etc/bash_completion
+  fi
+fi
+
+# --- tmux session management ---
+alias sessions="tmux list-sessions 2>/dev/null || echo 'No sessions'"
+alias kill-session="tmux kill-session -t"
+
+# List tmux sessions sorted by name
+axlist() {
+    tmux list-sessions -F "#{session_name}" 2>/dev/null | sort | while read s; do
+        echo "  $s"
+    done
+}
+
+# --- PATH ---
+export PATH="$HOME/.local/bin:$PATH"
+# Google Cloud SDK (if installed)
+if [ -f '/opt/google-cloud-sdk/path.bash.inc' ]; then
+    . '/opt/google-cloud-sdk/path.bash.inc'
+fi
+
+# --- Claude Code ---
+# Run claude with background tasks enabled by default.
+# Adjust permission mode to your preference:
+#   dontAsk     - never ask for permissions (for trusted dev servers)
+#   acceptEdits - auto-accept file edits but ask for other actions
+#   default     - ask for all permissions
+alias cc="ENABLE_BACKGROUND_TASKS=1 claude --permission-mode dontAsk"
+alias claude="ENABLE_BACKGROUND_TASKS=1 claude --permission-mode dontAsk"
+
+# --- Multi-account switching ---
+# Load per-service key files (not tracked in git, stored in ~/)
+# Create these files with chmod 600 and add your tokens.
+source ~/.render-keys 2>/dev/null
+source ~/.supabase-keys 2>/dev/null
+
+# Render account switching (add one function per project)
+# render-myproject() { export RENDER_API_KEY="$RENDER_KEY_MYPROJECT"; echo "Switched to Render: myproject"; }
+# render-which() { curl -s -H "Authorization: Bearer $RENDER_API_KEY" https://api.render.com/v1/owners?limit=1 | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['owner']['name'])"; }
+
+# Supabase account switching (add one function per project)
+# sb-myproject() { export SUPABASE_ACCESS_TOKEN="$SUPABASE_KEY_MYPROJECT"; echo "Switched to Supabase: myproject"; }
+# sb-which() { supabase orgs list 2>/dev/null | head -5; }
+
+# GitHub account switching (add one alias per account)
+# gh-personal="gh auth switch --user <YOUR_USERNAME>"
+# gh-which="gh auth status 2>&1 | grep Active -A1 | head -2"
+
+# --- API Keys ---
+# Do NOT put API keys here. Store them in ~/.bash_local (not tracked in git).
+# Example ~/.bash_local:
+#   export OPENAI_API_KEY="sk-..."
+#   export ANTHROPIC_API_KEY="sk-ant-..."
+#   export GEMINI_API_KEY="AIza..."

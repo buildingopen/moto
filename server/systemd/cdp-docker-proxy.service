@@ -1,0 +1,16 @@
+[Unit]
+Description=CDP Docker Bridge Proxy (socat)
+# Bridges Chrome CDP port from host to Docker bridge network so containers can reach it.
+# Requires: apt install socat
+After=chrome-headless.service docker.service
+
+[Service]
+Type=simple
+# Listens on the Docker bridge IP (172.17.0.1 by default) and forwards to localhost CDP.
+# Adjust the bind address if your Docker bridge differs (ip addr show docker0).
+ExecStart=/usr/bin/socat TCP-LISTEN:9222,bind=172.17.0.1,reuseaddr,fork TCP:127.0.0.1:9222
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+#!/bin/bash
+# safe-run: run a command inside the memory-guard cgroup
+#
+# Usage: safe-run <command> [args...]
+#
+# Simpler than safe-pipeline: no flock, no timeout. Just cgroup memory cap.
+# Use this for manual one-off heavy commands.
+#
+# Requires: memory-guard.slice installed in systemd
+
+exec systemd-run --slice=memory-guard.slice --scope -- "$@"

@@ -1,0 +1,9 @@
+[Unit]
+Description=Check SSHFS mounts every 30s
+
+[Timer]
+OnBootSec=30
+OnUnitActiveSec=30
+
+[Install]
+WantedBy=timers.target

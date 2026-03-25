@@ -1,0 +1,19 @@
+[Unit]
+Description=Mount remote home via SSHFS
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Replace placeholders:
+#   <SSH_ALIAS>       - SSH host alias from ~/.ssh/config (e.g. "remote-mac")
+#   <REMOTE_PATH>     - Path on the remote machine (e.g. /Users/username)
+#   <LOCAL_MOUNT_POINT> - Where to mount locally (must exist: mkdir -p <LOCAL_MOUNT_POINT>)
+ExecStart=/usr/bin/sshfs \
+  -o StrictHostKeyChecking=no,reconnect,ServerAliveInterval=15,allow_other \
+  <SSH_ALIAS>:<REMOTE_PATH> <LOCAL_MOUNT_POINT>
+ExecStop=/usr/bin/fusermount -u <LOCAL_MOUNT_POINT>
+
+[Install]
+WantedBy=multi-user.target

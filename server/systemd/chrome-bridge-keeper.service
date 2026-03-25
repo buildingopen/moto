@@ -1,0 +1,19 @@
+[Unit]
+Description=Chrome Bridge Keeper - CDP keepalive + auto-patch
+# List all Chrome service names you want keepalive to wait for
+After=chrome-headless.service
+Wants=chrome-headless.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/chrome-bridge-keeper
+Restart=always
+RestartSec=10
+Environment=HOME=/root
+Environment=USER=root
+Environment=DISPLAY=:99
+Environment=NODE_PATH=/usr/lib/node_modules
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+[Install]
+WantedBy=multi-user.target
