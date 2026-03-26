@@ -137,6 +137,9 @@ Slash commands that extend Claude's capabilities. Each skill is a `SKILL.md` fil
 **Planning & Review:**
 `retro` (weekly retrospective), `compass` (strategic planning), `blast-radius` (impact analysis), `deep-audit` (full repo audit via Gemini), `cost` (token spend reporting)
 
+**Auditing:**
+`ui-audit` (UX/product review + wireframe comparison with Playwright screenshots and CSS extraction)
+
 **Document Generation:**
 `pdf`, `docx`, `pptx`, `xlsx` manipulation
 
@@ -243,8 +246,22 @@ The `settings.json` file has `$HOME` paths pre-resolved by the installer. If you
 
 ## Related Projects
 
-- **[openclaw-setup](https://github.com/buildingopen/openclaw-setup)** - Standalone WhatsApp gateway setup guide (subset of this repo's `whatsapp/` directory)
-- **[session-recall](https://www.npmjs.com/package/session-recall)** - Recover context after Claude's automatic compaction
+Other open-source tools from BuildingOpen:
+
+| Project | Description |
+|---------|-------------|
+| **[bouncer](https://github.com/buildingopen/bouncer)** | Independent Gemini quality gate that audits Claude Code's output before it can stop |
+| **[claude-code-stats](https://github.com/buildingopen/claude-code-stats)** | Spotify Wrapped for Claude Code. Visualize your AI coding stats, token usage, and costs |
+| **[claude-wrapped](https://github.com/buildingopen/claude-wrapped)** | Visualize your Claude Code stats with `npx claude-entropy` |
+| **[hook-stats](https://github.com/buildingopen/hook-stats)** | Analyze your Claude Code bash command log |
+| **[session-recall](https://github.com/buildingopen/session-recall)** | Search and recover context after Claude's automatic compaction |
+| **[browse](https://github.com/buildingopen/browse)** | Browser automation CLI with autonomous agent mode via CDP |
+| **[openbrowser](https://github.com/buildingopen/openbrowser)** | Give AI your browser. Check email, track orders, download receipts. MCP server + CLI |
+| **[openqueen](https://github.com/buildingopen/openqueen)** | Autonomous coding agent controlled by WhatsApp/Telegram. Gemini orchestrates Claude/Codex |
+| **[openclaw-setup](https://github.com/buildingopen/openclaw-setup)** | WhatsApp gateway setup guide (subset of this repo's `whatsapp/` directory) |
+| **[blast-radius](https://github.com/buildingopen/blast-radius)** | Find all files affected by your changes. One bash script, zero dependencies |
+| **[dep-check](https://github.com/buildingopen/dep-check)** | Find dead imports in your project. One bash script |
+| **[ai-error-analyzer](https://github.com/buildingopen/ai-error-analyzer)** | 6 rules to reduce wasted AI coding retries |
 
 ---
 

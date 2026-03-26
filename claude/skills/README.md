@@ -115,6 +115,7 @@ See `skill-creator/SKILL.md` for the full guide.
 | **slide-design** | Visual design system for high-quality presentation slides |
 | **subagent-templates** | Templates and patterns for spawning and coordinating parallel Claude agents |
 | **target-loop** | Iterative improvement loop for any target output until it hits a quality bar |
+| **ui-audit** | UX/product review + wireframe comparison with Playwright screenshots and CSS extraction |
 | **webapp-testing** | Test local web applications using Playwright |
 | **workplan** | Create, update, and close work plans for multi-step tasks |
 | **xlsx** | Create, read, edit, and analyze Excel spreadsheets (.xlsx files) |
