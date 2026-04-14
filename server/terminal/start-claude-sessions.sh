@@ -29,6 +29,5 @@ find /root -maxdepth 2 -name ".git" -type d 2>/dev/null \
         if tmux has-session -t "$name" 2>/dev/null; then
             continue
         fi
-        tmux new-session -d -s "$name" -c "$repo"
-        tmux send-keys -t "$name" "happy claude" Enter
+        tmux new-session -d -s "$name" -c "$repo" "happy claude"
     done
