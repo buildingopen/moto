@@ -1,0 +1,35 @@
+# ~/.zshrc additions for Mac — Claude Code dev server workflow
+#
+# Sanitized template. Add to your ~/.zshrc or source this file directly:
+#   source ~/path/to/claude-setup/mac/zshrc
+#
+# Requires: iTerm2, SSH alias "dev" configured in ~/.ssh/config
+
+# --- Dev server connection ---
+#
+# Single command to connect to all running tmux sessions on the dev server.
+# Opens one iTerm2 tab per tmux session, each attached to its own session.
+# Falls back to creating a new "main" session if none exist.
+#
+# Usage: dev
+dev() {
+  local sessions
+  sessions=$(ssh dev "tmux ls -F '#{session_name}'" 2>/dev/null)
+  if [ -z "$sessions" ]; then
+    ssh dev -t "tmux new -s main"
+    return
+  fi
+  local first rest
+  first=$(echo "$sessions" | head -1)
+  rest=$(echo "$sessions" | tail -n +2)
+  # Open each additional session in a new iTerm2 tab
+  echo "$rest" | while read -r s; do
+    [ -z "$s" ] && continue
+    osascript -e "tell application \"iTerm2\" to tell current window to create tab with default profile command \"ssh dev -t 'tmux attach -t $s'\""
+  done
+  # Attach current tab to first session
+  ssh dev -t "tmux attach -t $first"
+}
+
+# List running tmux sessions on the dev server (no attach)
+alias devs="ssh dev -t 'tmux ls'"
