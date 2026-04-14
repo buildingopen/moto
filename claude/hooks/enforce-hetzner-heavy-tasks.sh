@@ -8,7 +8,7 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 
 # Allow SSH commands that delegate TO servers (the correct pattern)
 # Customize: replace with your actual server aliases
-if echo "$COMMAND" | grep -qiE "^ssh (dev|devserver|hetzner|ax41)"; then
+if echo "$COMMAND" | grep -qiE "^ssh (dev|devserver|hetzner|ax41)(\s|$)"; then
     exit 0
 fi
 

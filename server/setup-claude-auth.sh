@@ -67,8 +67,7 @@ ok "Connected to $SERVER"
 # --- 3. Copy credentials file ---
 
 info "Copying credentials to $SERVER:~/.claude/.credentials.json..."
-ssh "$SERVER" "mkdir -p ~/.claude"
-printf '%s\n' "$CREDS" | ssh "$SERVER" "cat > ~/.claude/.credentials.json && chmod 600 ~/.claude/.credentials.json"
+printf '%s\n' "$CREDS" | ssh -o ConnectTimeout=10 "$SERVER" "umask 0077; mkdir -p ~/.claude; cat > ~/.claude/.credentials.json; chmod 600 ~/.claude/.credentials.json"
 ok ".credentials.json installed"
 
 # --- 4. Set ANTHROPIC_AUTH_TOKEN in .bashrc ---
@@ -79,9 +78,9 @@ ok ".credentials.json installed"
 info "Setting ANTHROPIC_AUTH_TOKEN in ~/.bashrc on $SERVER..."
 # Use bash -s + heredoc to safely inject the dynamic token line without quoting nightmares.
 # The token is sourced from the credentials file at each login — no literal token in .bashrc.
-ssh "$SERVER" 'bash -s' <<'REMOTESCRIPT'
+ssh -o ConnectTimeout=10 "$SERVER" 'bash -s' <<'REMOTESCRIPT'
 touch ~/.bashrc
-sed -i '/ANTHROPIC_AUTH_TOKEN/d' ~/.bashrc
+sed -i '/^export ANTHROPIC_AUTH_TOKEN=/d' ~/.bashrc
 cat >> ~/.bashrc <<'BASHLINE'
 export ANTHROPIC_AUTH_TOKEN=$(python3 -c "import json,os; d=json.load(open(os.path.expanduser('~/.claude/.credentials.json'))); print(d['claudeAiOauth']['accessToken'])" 2>/dev/null)
 BASHLINE
@@ -93,7 +92,7 @@ ok "ANTHROPIC_AUTH_TOKEN set in ~/.bashrc (reads from credentials file)"
 # hasCompletedOnboarding is absent from the config, regardless of auth state.
 
 info "Marking onboarding complete on $SERVER..."
-ssh "$SERVER" "python3 - <<'PYEOF'
+ssh -o ConnectTimeout=10 "$SERVER" "python3 - <<'PYEOF'
 import json, os, subprocess
 
 path = os.path.expanduser('~/.claude.json')
@@ -118,7 +117,7 @@ ok "~/.claude.json updated"
 # --- 6. Verify ---
 
 info "Verifying auth on $SERVER..."
-RESULT=$(ssh "$SERVER" "claude auth status 2>/dev/null" 2>/dev/null || true)
+RESULT=$(ssh -o ConnectTimeout=10 "$SERVER" "claude auth status 2>/dev/null" 2>/dev/null || true)
 if [ -z "$RESULT" ]; then
     err "Auth verification failed: 'claude auth status' returned no output. Is Claude Code installed on $SERVER?"
 fi
