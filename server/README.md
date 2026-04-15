@@ -2,6 +2,42 @@
 
 This directory contains everything needed to turn a dedicated Linux server into a productive Claude Code environment with browser automation, safe execution wrappers, SSHFS mounts, and multi-account tooling.
 
+## Workflow
+
+The setup this repo encodes:
+
+```
+Mac (iTerm2)
+  └── dev()  ──── SSH ──── Linux dev server (49.213.x.x or similar)
+                               ├── tmux: fitness-assessment  → happy claude
+                               ├── tmux: floom-internal      → happy claude
+                               └── tmux: second-brain        → happy claude
+
+Mobile (iOS/Android)
+  └── Happy app  ──── HTTPS ──── same tmux sessions (via happy.slopus.com)
+```
+
+**What this gives you:**
+- One command (`dev`) from Mac opens one iTerm2 tab per running tmux session, each attached
+- Sessions persist through SSH disconnects — close your laptop, work continues
+- Mobile access via Happy: send prompts, watch output, get notified when Claude is done
+- On every server reboot, sessions auto-start per git repo and launch `happy claude`
+- Auth is managed by `setup-claude-auth.sh` — push credentials from Mac Keychain, no OAuth pain
+
+**Day-to-day:**
+```bash
+dev           # connect from Mac — opens one tab per session
+devs          # list sessions without attaching
+ssh dev       # plain SSH if you prefer
+```
+
+**Re-authentication** (credentials expire ~1 year):
+```bash
+./server/setup-claude-auth.sh dev
+```
+
+---
+
 ## Prerequisites
 
 - Ubuntu 22.04+ or Debian 12+
