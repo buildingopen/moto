@@ -18,6 +18,18 @@ Built by [@federicodeponte](https://github.com/federicodeponte) to run 20+ concu
 
 ---
 
+## Who is this for?
+
+- **You run Claude Code (or Codex, or opencode) all day** and your laptop's fan is tired.
+- **You already have a VPS / dedicated box** (Hetzner, OVH, Latitude, Fly machine, your own homelab) and want to stop SSH-ing in and re-creating tmux windows by hand.
+- **You want agents that survive**: Mac sleep, laptop closed, server OOM, server reboot — `moto up` restores the same 20 tabs in one iTerm window every time.
+- **You need agents that look logged-in**: shared Chrome with CDP on the Docker bridge, so agents attach to an already-authenticated browser instead of logging into Google / GitHub / LinkedIn per session.
+- **You don't want to maintain scattered dotfiles**: the whole setup is one repo, one `install.sh mac`, one `install.sh server-remote`.
+
+Not for you if: you only run agents locally, you're on Windows, or you're looking for a hosted SaaS.
+
+---
+
 ## 60-second quickstart
 
 ```bash
@@ -176,6 +188,22 @@ HOST=your.host ./server/test/proxy-smoke.sh          # proxy sidecar end-to-end
 ```
 
 See [`server/test/README.md`](server/test/README.md) for what the tests cover.
+
+---
+
+## Related projects
+
+`moto` pairs well with other [BuildingOpen](https://github.com/buildingopen) tools for Claude Code operators:
+
+| Project | What it does |
+|---------|--------------|
+| **[claude-setup](https://github.com/buildingopen/claude-setup)** | The Claude Code config (`~/.claude`) that moto syncs to the server — 60+ skills, 12 safety hooks, CLAUDE.md templates |
+| **[openqueen](https://github.com/buildingopen/openqueen)** | Autonomous agent orchestrator — spawn Claude / Codex workers on moto from WhatsApp or Telegram |
+| **[bouncer](https://github.com/buildingopen/bouncer)** | Gemini-powered quality gate that audits Claude's output before it can stop |
+| **[session-recall](https://github.com/buildingopen/session-recall)** | Recover Claude Code context after automatic compaction |
+| **[browse](https://github.com/buildingopen/browse)** | Browser automation CLI — the agents running inside moto use this against the shared Chrome CDP |
+| **[openbrowser](https://github.com/buildingopen/openbrowser)** | MCP server that gives agents authenticated browser access |
+| **[blast-radius](https://github.com/buildingopen/blast-radius)** | Find every file affected by a change — one bash script |
 
 ## License
 
