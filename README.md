@@ -2,6 +2,8 @@
 
 > Your Mac is the remote control. A Linux box is the garage. **One command brings every agent window back.**
 
+> **Status: v0.1 — experimental.** This is extracted from a setup that runs 20+ concurrent Claude sessions on a Hetzner AX41 24/7. The code and docs are solid, but it has not yet been end-to-end installed on a clean box from this repo. Expect small paper cuts. Issues + PRs very welcome.
+
 `moto` is an opinionated, reproducible setup for running an army of AI coding agents (Claude Code, Codex, opencode) on a big Linux box, controlled from your Mac, with:
 
 - 🪟 **One iTerm window, many tabs** — every agent session as a tab, restored with one command after a reboot, laptop close, or Mac sleep
@@ -103,6 +105,21 @@ See [`docs/architecture.md`](docs/architecture.md) for the full diagram.
 
 **Server**: Debian 12 / Ubuntu 22.04+, root or sudo, ≥16 GB RAM recommended, public IPv4. Tested on Hetzner AX41.
 
+**Agent CLIs (install separately on the server after `./install.sh server`)** — `moto` wraps these, it doesn't bundle them:
+
+```bash
+# Claude Code
+npm i -g @anthropic-ai/claude-code && claude /login
+
+# Codex (OpenAI)
+npm i -g @openai/codex
+
+# opencode (optional)
+npm i -g opencode
+```
+
+`moto new foo/bar` needs `claude` in `PATH`. `moto newx` needs `codex`. `moto newo` needs `opencode`. Only install what you'll actually use.
+
 ---
 
 ## Commands
@@ -134,6 +151,21 @@ Legacy aliases (`ax`, `axo`, `axn`, `axk`, `axl`, `axwin`, `aximg`, `axd`, `axq`
 - [Claude config sync (why SSHFS)](docs/claude-sync.md) — why not rsync/git
 
 ---
+
+## Known gaps (v0.1)
+
+- **Not yet cold-installed**: all pieces are validated individually (`systemd-analyze verify`, `docker compose config`, `shellcheck`, running against the author's live server), but the full `./install.sh server-remote` hasn't been run on a clean box yet from this repo.
+- **Agent CLIs not bundled**: `claude` / `codex` / `opencode` are npm installs — see [Requirements](#requirements).
+- **`chrome-bridge-keeper`** ships as a simple bash CDP-ping loop. The author's real setup uses a ~300-line Python variant that also auto-patches the Claude Code browser extension; too specific to include here. Add `# MOTO_KEEP_LOCAL` to your own script and `server/install.sh` will preserve it.
+- **x86_64 only** for now — Chrome, Docker images, and the Hetzner target are all amd64. ARM support is untested.
+- **IPv6**: reverse tunnel and SSHFS work over IPv4; IPv6 is not explicitly tested.
+- **No automated e2e test** for the reverse-tunnel → SSHFS → `moto up` path. `moto doctor` covers static health.
+
+If you hit something, please open an issue — most gaps are 10-minute fixes once surfaced.
+
+## Contributing
+
+PRs welcome. Run `shellcheck -S warning server/bin/* mac/bin/moto` and `docker compose -f server/docker/compose.yaml config` before submitting.
 
 ## License
 

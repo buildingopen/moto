@@ -71,6 +71,9 @@ services:
       - "2223:22"
     volumes:
       - dev-sandbox-home:/root
+      # Seeds authorized_keys from the host root user's public key on first boot.
+      # Read-only, so the container cannot write back to the host.
+      - /root/.ssh:/host-ssh:ro
     networks:
       - moto-net
 
