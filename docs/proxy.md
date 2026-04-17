@@ -6,16 +6,24 @@ like a normal user.
 
 ## How moto does it
 
-`server/docker/compose.yaml` includes an optional `proxy` service (3proxy)
-under the `proxy` profile. It:
+`server/docker/compose.yaml` includes an optional `proxy` service (tinyproxy,
+built locally from `server/docker/proxy/`) under the `proxy` profile. It:
 
 - reads `PROXY_URL` from `.env`
-- exposes a local forward proxy on `:8118` (HTTP) and `:1080` (SOCKS5)
-- forwards all requests through your residential endpoint
+- exposes an HTTP forward proxy on `127.0.0.1:8118` (loopback only)
+- forwards all requests through your residential endpoint via tinyproxy's
+  `upstream http|https|socks5 …` directive, generated at container start
+  by `server/docker/proxy/entrypoint.sh`
 
 Other containers (`runtime-api`, `dev-sandbox`, optionally
 `authenticated-chrome`) set `HTTP_PROXY=http://moto-proxy:8118` so every
-outbound request is rewritten.
+outbound request is rewritten. Chrome uses its own `--proxy-server=$PROXY_URL`
+flag and bypasses this sidecar — see the Chrome-specific note below.
+
+**No SOCKS5 listener in v0.1.** Tinyproxy only offers HTTP/HTTPS on the
+inbound side (it does accept a SOCKS5 *upstream*). Most agent clients speak
+HTTP proxy anyway; run a separate `gost` / `microsocks` container if you
+genuinely need a local SOCKS5 listener.
 
 ## Enable
 

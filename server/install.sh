@@ -207,8 +207,7 @@ echo "→ preflight: port availability..."
 declare -A want_ports=(
   ["3001"]="runtime-api"
   ["2223"]="dev-sandbox"
-  ["8118"]="proxy (HTTP)"
-  ["1080"]="proxy (SOCKS5)"
+  ["8118"]="proxy"
 )
 conflicts=0
 for port in "${!want_ports[@]}"; do

@@ -155,6 +155,7 @@ Legacy aliases (`ax`, `axo`, `axn`, `axk`, `axl`, `axwin`, `aximg`, `axd`, `axq`
 ## Known gaps (v0.1)
 
 - **Cold install validated in a throwaway container** (`debian:12` on the author's Hetzner AX41 — 50/50 checks pass, see [`server/test/`](server/test/)). Not yet validated on a bare-metal box from zero, but every piece the installer touches on a new box — apt, Chrome, Docker CE, systemd unit syntax, script layout — is exercised by that test.
+- **Residential proxy sidecar end-to-end tested** with `server/test/proxy-smoke.sh`: URL parser handles http/https/socks5 with and without auth, direct egress works when `PROXY_URL` is empty, and chained traffic is proved to flow through the upstream (parent tinyproxy's own logs show the forwarded request). Tinyproxy under the hood — we tried 3proxy first, parent directive was silently ignored across three versions.
 - **Agent CLIs not bundled**: `claude` / `codex` / `opencode` are npm installs — see [Requirements](#requirements).
 - **`chrome-bridge-keeper`** ships as a simple bash CDP-ping loop. The author's real setup uses a ~300-line Python variant that also auto-patches the Claude Code browser extension; too specific to include here. Add `# MOTO_KEEP_LOCAL` to your own script and `server/install.sh` will preserve it.
 - **x86_64 only** for now — Chrome, Docker images, and the Hetzner target are all amd64. ARM support is untested.
@@ -168,12 +169,13 @@ If you hit something, please open an issue — most gaps are 10-minute fixes onc
 PRs welcome. Before submitting:
 
 ```bash
-shellcheck -S warning server/bin/* mac/bin/moto server/test/*.sh
+shellcheck -S warning server/bin/* mac/bin/moto server/test/*.sh server/docker/proxy/entrypoint.sh
 (cd server/docker && docker compose config) >/dev/null
 HOST=your.host ./server/test/run-container-test.sh   # full isolated install test
+HOST=your.host ./server/test/proxy-smoke.sh          # proxy sidecar end-to-end
 ```
 
-See [`server/test/README.md`](server/test/README.md) for what the container test covers.
+See [`server/test/README.md`](server/test/README.md) for what the tests cover.
 
 ## License
 

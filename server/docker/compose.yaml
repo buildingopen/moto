@@ -21,21 +21,23 @@ networks:
 services:
 
   # ── Residential IP proxy egress ───────────────────────────────────
+  # Built locally from ./proxy/ (tinyproxy) so the entrypoint can parse
+  # PROXY_URL into a real `upstream` directive at container start.
+  # HTTP forward proxy on :8118. No SOCKS5 listener in v0.1 — run a
+  # separate tool if you need one locally.
   proxy:
-    image: 3proxy/3proxy:0.9.4
+    build: ./proxy
+    image: moto-proxy:local
     container_name: moto-proxy
     restart: unless-stopped
     profiles: ["proxy"]
     environment:
       PROXY_URL: "${PROXY_URL:-}"
-    volumes:
-      - ./proxy/3proxy.cfg:/etc/3proxy/3proxy.cfg:ro
     networks:
       - moto-net
-    # Only expose on Docker bridge, not the internet.
+    # Bound to loopback only — never exposed to the internet.
     ports:
-      - "127.0.0.1:8118:8118"  # HTTP proxy
-      - "127.0.0.1:1080:1080"  # SOCKS5
+      - "127.0.0.1:8118:8118"
     healthcheck:
       test: ["CMD", "nc", "-z", "127.0.0.1", "8118"]
       interval: 30s

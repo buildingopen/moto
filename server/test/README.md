@@ -1,10 +1,10 @@
-# moto — container install test
+# moto — container-based tests
 
-Runs `server/install.sh` end-to-end inside a throwaway `debian:12` container on your server, **without touching the host**. Proves that a cold install actually works on a clean box.
+Two isolated tests that run on the server **without touching the host**.
 
-## Run it
+## Install test — `run-container-test.sh`
 
-From your Mac (assumes `AX41_HOST` in `.env` or `HOST=…` env var, plus SSH access + Docker on the host):
+Runs `server/install.sh` end-to-end inside a throwaway `debian:12` container. Proves that a cold install actually works on a clean box.
 
 ```bash
 cd moto
@@ -12,6 +12,32 @@ HOST=ax41 ./server/test/run-container-test.sh
 ```
 
 Takes ~60–90s on first run (initial `debian:12` + Chrome pulls), ~30s on subsequent runs.
+
+## Proxy smoke test — `proxy-smoke.sh`
+
+Builds `server/docker/proxy/` (tinyproxy) and proves:
+
+1. `PROXY_URL` parser handles `http://`, `https://`, `socks5://`, with and without auth (5 cases).
+2. Empty `PROXY_URL` → listener comes up, direct egress fetches example.com.
+3. Chained `PROXY_URL` pointing at a second tinyproxy → **the parent's own logs confirm the forwarded request**. This is strict proof that the upstream directive is actually engaged, not just that curl got a 200.
+
+```bash
+cd moto
+HOST=ax41 ./server/test/proxy-smoke.sh
+```
+
+Takes ~15s. Latest run:
+
+```
+  ✓ parse [http://u:p@10.254.254.254:8080] → …
+  ✓ parse [http://10.254.254.254:8080] → …
+  ✓ parse [https://a:b@10.254.254.254:443] → …
+  ✓ parse [socks5://u:p@10.254.254.254:1080] → …
+  ✓ parse [<empty>] → 'PROXY_URL empty'
+  ✓ direct egress: PROXY_URL empty → example.com fetched through sidecar
+  ✓ chained upstream: parent saw the forwarded request
+  ✓ ALL PROXY SMOKE CHECKS PASSED
+```
 
 ## What it covers
 
