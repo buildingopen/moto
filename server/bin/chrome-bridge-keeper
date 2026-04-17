@@ -1,7 +1,10 @@
 #!/bin/bash
-# chrome-bridge-keeper — watches authenticated-chrome CDP and restarts it if it stalls.
-#
-# Runs under chrome-bridge-keeper.service.
+# chrome-bridge-keeper — watches authenticated-chrome CDP and restarts the
+# service if it stalls. Conservative default; users with advanced needs
+# (Claude Code MCP extension auto-patching, multi-port keepalive, etc.) can
+# drop in a custom implementation at /usr/local/bin/chrome-bridge-keeper and
+# mark it with a `# MOTO_KEEP_LOCAL` comment — `server/install.sh` will
+# detect that and refuse to overwrite.
 
 set -u
 LOG="${LOG:-/var/log/chrome-bridge-keeper.log}"
@@ -11,7 +14,7 @@ FAIL_THRESHOLD=3
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" | tee -a "$LOG" >/dev/null; }
 
-log "chrome-bridge-keeper starting"
+log "chrome-bridge-keeper starting (simple mode)"
 
 while true; do
   if curl -sS --max-time 5 "$CDP_URL" >/dev/null 2>&1; then

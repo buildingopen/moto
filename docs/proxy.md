@@ -64,3 +64,20 @@ ssh ax41 'cd /opt/moto/server/docker && docker compose stop proxy && systemctl r
 ```
 
 Traffic will return to using the server's native IP.
+
+---
+
+## Related: Cloudflare tunnel
+
+The `cloudflared` service in `compose.yaml` is under the `tunnel` profile and
+is **not** started by default. To use it:
+
+```bash
+# 1. set CLOUDFLARE_TUNNEL_TOKEN in .env (non-empty!)
+# 2. activate the profile:
+cd /opt/moto/server/docker
+docker compose --profile tunnel up -d cloudflared
+```
+
+If `CLOUDFLARE_TUNNEL_TOKEN` is empty when the profile is activated, the
+container crash-loops — leave the profile off unless you've set the token.

@@ -171,6 +171,7 @@ cmd_doctor() {
   if ssh_ax "ssh -o BatchMode=yes -o ConnectTimeout=3 mac 'echo ok' 2>/dev/null | grep -q ok"; then
     ok "reverse tunnel (server → mac) alive"
   else
+    # shellcheck disable=SC2016  # $UID is literal advice for the user to type
     printf '%s⚠%s reverse tunnel DOWN. On Mac: launchctl kickstart -k gui/$UID/sh.buildingopen.moto.reverse-tunnel\n' "$c_yellow" "$c_reset"
   fi
 

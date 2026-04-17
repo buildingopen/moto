@@ -1,3 +1,5 @@
+# shellcheck shell=bash
+# (sourced from ~/.zshrc.d/; zsh-compatible syntax)
 # moto — session shortcuts (zsh functions)
 # Wraps the `moto` CLI, plus keeps the classic `ax*` aliases for muscle memory.
 

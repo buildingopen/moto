@@ -1,3 +1,5 @@
+# shellcheck shell=bash
+# (sourced from ~/.zshrc.d/; zsh-compatible syntax)
 # moto — extra helpers.
 
 # Create a new AX41 session via a macOS dialog prompt.
