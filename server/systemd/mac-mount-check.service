@@ -1,0 +1,7 @@
+[Unit]
+Description=moto — check and remount stale Mac SSHFS mounts
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/check-mac-mounts

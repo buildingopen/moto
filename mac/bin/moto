@@ -1,0 +1,361 @@
+#!/usr/bin/env bash
+# moto 🛵 — remote-agent control plane
+#
+# One command to bring your tmux-based agent sessions into one iTerm window.
+#
+# Usage: moto <subcommand> [args...]
+#   moto up                    reopen all sessions in one iTerm window
+#   moto new NAME              create a new claude session (format: project/task)
+#   moto newx NAME             create a new codex session
+#   moto newo NAME             create a new opencode session
+#   moto attach NAME           attach session as a tab in the main window
+#   moto ls                    list server sessions
+#   moto kill NAME             kill a session on the server
+#   moto img PATH              scp an image to the server, print remote path
+#   moto status                health: tmux count, mounts, chrome, containers
+#   moto doctor                diagnose the setup
+#   moto logs                  tail cleanup + mount-check logs on the server
+#   moto down                  detach all clients (server keeps running)
+
+set -euo pipefail
+
+# ── Resolve moto dir + load .env ─────────────────────────────────────
+MOTO_BIN="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || python3 -c "import os,sys;print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}")"
+MOTO_DIR="$(cd "$(dirname "$MOTO_BIN")/../.." && pwd)"
+
+if [[ -f "$MOTO_DIR/.env" ]]; then
+  set -a; source "$MOTO_DIR/.env"; set +a
+fi
+
+: "${AX41_HOST:=ax41}"
+SSH_HOST="${AX41_SSH_HOST:-ax41}"   # prefer the named SSH host
+
+# ── Helpers ──────────────────────────────────────────────────────────
+c_reset=$'\e[0m'; c_bold=$'\e[1m'
+c_green=$'\e[32m'; c_red=$'\e[31m'; c_yellow=$'\e[33m'; c_blue=$'\e[34m'
+
+die() { printf '%s✗%s %s\n' "$c_red" "$c_reset" "$*" >&2; exit 1; }
+ok()  { printf '%s✓%s %s\n' "$c_green" "$c_reset" "$*"; }
+info(){ printf '%s•%s %s\n' "$c_blue" "$c_reset" "$*"; }
+
+ssh_ax() {
+  ssh -o ConnectTimeout=8 -o ServerAliveInterval=20 -o ServerAliveCountMax=3 \
+      "$SSH_HOST" "$@"
+}
+
+# Normalize a session name to project/task (task defaults to "main").
+norm_session() {
+  local s="${1:-main/main}"
+  [[ "$s" != */* ]] && s="$s/main"
+  printf '%s' "$s"
+}
+
+# AppleScript: open a command as a tab in the iTerm window with the most tabs,
+# or create a new window if none has more than 1 tab.
+iterm_open_tab() {
+  local cmd="$1"
+  osascript <<EOF 2>/dev/null
+tell application "iTerm"
+    activate
+    set mainWin to missing value
+    set maxTabs to 0
+    repeat with w in windows
+        set tabCount to count of tabs of w
+        if tabCount > maxTabs then
+            set maxTabs to tabCount
+            set mainWin to w
+        end if
+    end repeat
+    if mainWin is not missing value and maxTabs > 1 then
+        tell mainWin to create tab with default profile
+        tell current session of mainWin to write text "$cmd"
+    else
+        set w to (create window with default profile)
+        tell current session of w to write text "$cmd"
+    end if
+end tell
+EOF
+}
+
+# ── Subcommands ──────────────────────────────────────────────────────
+
+cmd_new() {
+  local tool="${1:-claude}"
+  local session
+  session="$(norm_session "${2:-}")"
+  case "$tool" in
+    claude) remote_cmd="./cs '$session' -CC" ;;
+    codex)  remote_cmd="./cx '$session' -CC" ;;
+    opencode) remote_cmd="./co '$session' -CC" ;;
+    *) die "unknown tool: $tool" ;;
+  esac
+  local ssh_cmd="ssh -o ConnectTimeout=8 -o ServerAliveInterval=20 -t $SSH_HOST $remote_cmd"
+  iterm_open_tab "$ssh_cmd"
+  ok "opened $session ($tool)"
+}
+
+cmd_attach() {
+  cmd_new claude "$@"
+}
+
+cmd_ls() {
+  ssh_ax "tmux list-sessions -F '#{session_name}  [#{session_windows}w, attached=#{session_attached}]' 2>/dev/null" \
+    | sort || info "no sessions"
+}
+
+cmd_kill() {
+  local session
+  session="$(norm_session "${1:?usage: moto kill NAME}")"
+  ssh_ax "tmux kill-session -t '$session'" && ok "killed $session"
+}
+
+cmd_img() {
+  local file="${1:?usage: moto img PATH}"
+  [[ -f "$file" ]] || die "not a file: $file"
+  local name; name="$(basename "$file")"
+  scp -q "$file" "$SSH_HOST:/root/images/$name"
+  printf '/root/images/%s\n' "$name"
+}
+
+cmd_down() {
+  info "detaching all tmux clients on $SSH_HOST"
+  ssh_ax 'tmux list-clients -F "#{client_name}" 2>/dev/null | xargs -I{} tmux detach-client -t {} 2>/dev/null' || true
+  ok "all clients detached (sessions still running)"
+}
+
+cmd_status() {
+  printf '%s━━ moto status ━━%s\n' "$c_bold" "$c_reset"
+  ssh_ax 'bash -s' <<'REMOTE'
+set -u
+green=$'\e[32m'; red=$'\e[31m'; yellow=$'\e[33m'; reset=$'\e[0m'
+chk() { local name="$1" status="$2"; local mark="$green✓"; [[ "$status" != 0 ]] && mark="$red✗"; printf '  %s%s %s\n' "$mark" "$reset" "$name"; }
+
+tmux_count=$(tmux list-sessions 2>/dev/null | wc -l | tr -d ' ')
+echo "  tmux sessions: $tmux_count"
+
+for svc in tmux-server authenticated-chrome chrome-bridge-keeper cdp-docker-proxy mac-mount-check.timer moto-cleanup.timer; do
+  systemctl is-active --quiet "$svc" 2>/dev/null
+  chk "$svc" $?
+done
+
+# Mac mounts
+for mnt in /mnt/mac /mnt/mac-claude; do
+  timeout 2 ls "$mnt" >/dev/null 2>&1
+  chk "mount $mnt" $?
+done
+
+# Chrome CDP
+timeout 2 curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:9222/json/version | grep -q 200
+chk "chrome CDP :9222" $?
+
+# Docker containers
+if command -v docker >/dev/null; then
+  running=$(docker ps --format '{{.Names}}' 2>/dev/null | wc -l | tr -d ' ')
+  echo "  containers running: $running"
+fi
+REMOTE
+}
+
+cmd_logs() {
+  ssh_ax 'tail -n 20 /var/log/cleanup-stale.log 2>/dev/null; echo "---"; journalctl -u mac-mount-check --since "10 min ago" --no-pager 2>/dev/null | tail -n 20'
+}
+
+cmd_doctor() {
+  printf '%s━━ moto doctor ━━%s\n' "$c_bold" "$c_reset"
+
+  # 1. SSH to ax41
+  if ssh_ax 'echo ok' >/dev/null 2>&1; then ok "ssh $SSH_HOST"
+  else die "cannot ssh $SSH_HOST — check ~/.ssh/config and firewall"; fi
+
+  # 2. Reverse tunnel from server to Mac
+  if ssh_ax "ssh -o BatchMode=yes -o ConnectTimeout=3 mac 'echo ok' 2>/dev/null | grep -q ok"; then
+    ok "reverse tunnel (server → mac) alive"
+  else
+    printf '%s⚠%s reverse tunnel DOWN. On Mac: launchctl kickstart -k gui/$UID/sh.buildingopen.moto.reverse-tunnel\n' "$c_yellow" "$c_reset"
+  fi
+
+  # 3. iTerm scripting access
+  if osascript -e 'tell application "iTerm" to count windows' >/dev/null 2>&1; then
+    ok "iTerm AppleScript access"
+  else
+    printf '%s⚠%s iTerm AppleScript blocked. System Settings → Privacy → Automation.\n' "$c_yellow" "$c_reset"
+  fi
+
+  # 4. moto command in PATH
+  if command -v moto >/dev/null; then ok "moto in PATH ($(command -v moto))"
+  else printf '%s⚠%s moto not in PATH\n' "$c_yellow" "$c_reset"; fi
+
+  # 5. Mac sshd
+  if sudo -n systemsetup -getremotelogin 2>/dev/null | grep -qi on; then
+    ok "Mac Remote Login enabled"
+  else
+    printf '%s⚠%s Mac Remote Login may be off (Settings → Sharing → Remote Login)\n' "$c_yellow" "$c_reset"
+  fi
+
+  # 6. Server-side status
+  cmd_status
+}
+
+# ── `moto up` — the big one ──────────────────────────────────────────
+cmd_up() {
+  local mode="${1:-bg}"
+  if [[ "$mode" == "-fg" ]]; then
+    _up_worker
+    return
+  fi
+
+  local tmpdir="${TMPDIR:-/tmp}"
+  local pid_file="$tmpdir/moto-up.pid"
+  local log_file="$tmpdir/moto-up.log"
+
+  if [[ -f "$pid_file" ]]; then
+    local old_pid; old_pid=$(cat "$pid_file" 2>/dev/null || true)
+    if [[ -n "$old_pid" ]] && kill -0 "$old_pid" 2>/dev/null; then
+      info "moto up already running (pid $old_pid). Log: $log_file"
+      return 0
+    fi
+    rm -f "$pid_file"
+  fi
+
+  nohup "$0" up -fg >> "$log_file" 2>&1 &
+  local new_pid=$!
+  echo "$new_pid" > "$pid_file"
+  disown "$new_pid" 2>/dev/null || true
+  ok "moto up started in background (pid $new_pid). Log: $log_file"
+}
+
+_up_worker() {
+  info "detaching existing clients..."
+  ssh_ax 'tmux list-clients -F "#{client_name}" 2>/dev/null | xargs -I{} tmux detach-client -t {} 2>/dev/null' >/dev/null 2>&1 || true
+
+  info "listing sessions..."
+  local sessions
+  sessions=$(ssh_ax 'tmux list-sessions -F "#{session_activity}|#{session_name}" 2>/dev/null | grep "/" | grep -v "|q/" | sort -rn | cut -d"|" -f2')
+
+  [[ -z "$sessions" ]] && { info "no sessions found"; return 0; }
+
+  local -a sess_array=()
+  while IFS= read -r sess; do
+    [[ -n "$sess" ]] && sess_array+=("$sess")
+  done <<< "$sessions"
+
+  local count=${#sess_array[@]}
+  info "opening $count sessions..."
+
+  # Clean iTerm slate
+  pkill -9 iTerm 2>/dev/null || true
+  sleep 1
+  open -a iTerm
+  sleep 2
+
+  local main_win_id=""
+  local -a send_failed=()
+  local i=0
+  for sess in "${sess_array[@]}"; do
+    i=$((i+1))
+    local ssh_cmd="ssh -o ConnectTimeout=8 -o ServerAliveInterval=20 -t $SSH_HOST ./cs '$sess' -CC"
+    printf '  [%d/%d] %s ' "$i" "$count" "$sess"
+
+    local used_win_id
+    if [[ -z "$main_win_id" ]]; then
+      used_win_id=$(osascript -e "
+        tell application \"iTerm\"
+          set w to (create window with default profile command \"$ssh_cmd\")
+          return id of w
+        end tell" 2>/dev/null || true)
+    else
+      used_win_id=$(osascript -e "
+        tell application \"iTerm\"
+          if (count of windows) = 0 then
+            set w to (create window with default profile command \"$ssh_cmd\")
+            return id of w
+          end if
+          try
+            tell window id $main_win_id
+              create tab with default profile command \"$ssh_cmd\"
+              return id
+            end tell
+          on error
+            set w to (create window with default profile command \"$ssh_cmd\")
+            return id of w
+          end try
+        end tell" 2>/dev/null || true)
+    fi
+
+    if [[ -n "$used_win_id" ]]; then
+      main_win_id="$used_win_id"
+      echo "sent"
+    else
+      echo "failed"
+      send_failed+=("$sess")
+    fi
+    sleep 0.55
+  done
+
+  [[ -z "$main_win_id" ]] && die "could not create iTerm window"
+
+  info "waiting for connections..."
+  sleep 12
+
+  # Retry loop
+  for round in 1 2 3 4 5; do
+    local attached
+    attached=$(ssh_ax 'tmux list-clients -F "#{session_name}" 2>/dev/null' 2>/dev/null | sort -u)
+    local connected=0
+    local -a missing=()
+    for sess in "${sess_array[@]}"; do
+      if echo "$attached" | grep -qx -- "$sess"; then
+        connected=$((connected+1))
+      else
+        missing+=("$sess")
+      fi
+    done
+    printf '  connected: %d/%d\n' "$connected" "$count"
+    [[ ${#missing[@]} -eq 0 ]] && break
+    printf '  retry %d: %d missing\n' "$round" "${#missing[@]}"
+
+    for msess in "${missing[@]}"; do
+      local retry_cmd="ssh -o ConnectTimeout=8 -o ServerAliveInterval=20 -t $SSH_HOST ./cs '$msess' -CC"
+      osascript -e "
+        tell application \"iTerm\"
+          try
+            tell window id $main_win_id
+              create tab with default profile command \"$retry_cmd\"
+            end tell
+          end try
+        end tell" >/dev/null 2>&1 || true
+      sleep 0.55
+    done
+    sleep 12
+  done
+
+  local final
+  final=$(ssh_ax 'tmux list-clients -F "#{session_name}" 2>/dev/null' 2>/dev/null | sort -u | grep -c / || true)
+  ok "done. $final/$count connected."
+}
+
+# ── Dispatch ─────────────────────────────────────────────────────────
+main() {
+  local sub="${1:-}"
+  [[ -n "$sub" ]] && shift || true
+  case "$sub" in
+    up)      cmd_up "$@" ;;
+    down)    cmd_down ;;
+    new)     cmd_new claude "$@" ;;
+    newx)    cmd_new codex "$@" ;;
+    newo)    cmd_new opencode "$@" ;;
+    attach|a) cmd_attach "$@" ;;
+    ls|list) cmd_ls ;;
+    kill|k)  cmd_kill "$@" ;;
+    img)     cmd_img "$@" ;;
+    status)  cmd_status ;;
+    doctor)  cmd_doctor ;;
+    logs)    cmd_logs ;;
+    help|-h|--help|"")
+      sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'
+      ;;
+    *) die "unknown subcommand: $sub. Try: moto help" ;;
+  esac
+}
+
+main "$@"

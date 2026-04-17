@@ -1,0 +1,67 @@
+#!/bin/bash
+# cleanup-stale — reap orphaned agent side-processes.
+# Invoked every 10min by moto-cleanup.timer.
+
+set -u
+LOG="/var/log/cleanup-stale.log"
+
+# Load thresholds from /opt/moto/.env if present.
+if [[ -f /opt/moto/.env ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source /opt/moto/.env
+  set +a
+fi
+: "${NEXT_CPU_THRESHOLD:=50}"
+: "${CHROME_MAX_AGE_HOURS:=2}"
+
+log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"; }
+
+# 1) Kill orphaned next-server processes
+#    (parent=1, using more than $NEXT_CPU_THRESHOLD% CPU)
+while read -r pid cpu etime _cmd; do
+    [[ -z "$pid" ]] && continue
+    ppid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+    [[ "$ppid" != "1" ]] && continue
+    cpu_int=${cpu%.*}
+    (( cpu_int < NEXT_CPU_THRESHOLD )) && continue
+    log "killing orphan next-server pid=$pid cpu=${cpu}% etime=$etime"
+    kill "$pid" 2>/dev/null
+done < <(ps -eo pid,%cpu,etime,comm --no-headers | awk '$4 ~ /next-server/ {print $1, $2, $3, $4}')
+
+# 2) Kill orphan chromium >= $CHROME_MAX_AGE_HOURS hours old
+max_seconds=$(( CHROME_MAX_AGE_HOURS * 3600 ))
+while read -r pid etime _cmd; do
+    [[ -z "$pid" ]] && continue
+    ppid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+    [[ "$ppid" != "1" ]] && continue
+
+    # etime format: DD-HH:MM:SS | HH:MM:SS | MM:SS
+    if [[ "$etime" == *-* ]]; then
+        days=${etime%%-*}; rest=${etime#*-}
+        IFS=: read -r h m s <<<"$rest"
+        seconds=$(( days*86400 + h*3600 + m*60 + s ))
+    elif [[ $(echo "$etime" | tr -cd ':' | wc -c) -eq 2 ]]; then
+        IFS=: read -r h m s <<<"$etime"; seconds=$(( h*3600 + m*60 + s ))
+    else
+        IFS=: read -r m s <<<"$etime"; seconds=$(( m*60 + s ))
+    fi
+
+    if (( seconds >= max_seconds )); then
+        log "killing orphan chrome pid=$pid etime=$etime"
+        kill "$pid" 2>/dev/null
+    fi
+done < <(ps -eo pid,etime,comm --no-headers | awk '$3 ~ /chrome/ {print $1, $2, $3}')
+
+# 3) Clean stale tmux clients (socket vanished)
+for client in $(tmux list-clients -F "#{client_name}" 2>/dev/null); do
+    if [[ ! -e "$client" ]]; then
+        log "detaching stale tmux client $client"
+        tmux detach-client -t "$client" 2>/dev/null
+    fi
+done
+
+# 4) Trim the log
+if [[ -f "$LOG" ]] && (( $(wc -l < "$LOG") > 500 )); then
+    tail -200 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+fi

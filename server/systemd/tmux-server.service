@@ -1,0 +1,22 @@
+[Unit]
+Description=moto — tmux persistent server (OOM-immune)
+After=network.target
+Documentation=https://github.com/buildingopen/moto
+
+[Service]
+Type=forking
+User=root
+ExecStart=/usr/bin/tmux new-session -d -s init
+ExecStop=/usr/bin/tmux kill-server
+Restart=on-failure
+RestartSec=5
+
+# Reserve 16 GB so kernel/earlyoom kill other things first.
+MemoryLow=16G
+# Highest OOM resistance (−1000 = never kill).
+OOMScoreAdjust=-900
+# Keep all tmux child processes (agent sessions) in this cgroup.
+Delegate=yes
+
+[Install]
+WantedBy=multi-user.target

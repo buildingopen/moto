@@ -1,0 +1,26 @@
+name: test-install
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  dry-run-server-install:
+    runs-on: ubuntu-latest
+    container: debian:12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Render .env
+        run: |
+          cp .env.example .env
+          sed -i 's/^MAC_USER=.*/MAC_USER=ci/' .env
+          sed -i 's/^AX41_HOST=.*/AX41_HOST=127.0.0.1/' .env
+      - name: Syntax-check scripts
+        run: |
+          apt-get update -qq && apt-get install -y -qq bash
+          for f in install.sh mac/install.sh server/install.sh \
+                   server/bin/* mac/bin/moto; do
+            bash -n "$f"
+            echo "ok: $f"
+          done

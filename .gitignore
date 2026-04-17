@@ -1,0 +1,14 @@
+.env
+.env.local
+*.local
+.DS_Store
+node_modules/
+*.log
+*.pid
+
+server/browser/profile-backups/
+server/docker/proxy/config.local.yaml
+
+*.swp
+.idea/
+.vscode/

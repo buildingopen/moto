@@ -1,0 +1,7 @@
+[Unit]
+Description=moto — reap orphan dev-server and chrome processes
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/cleanup-stale

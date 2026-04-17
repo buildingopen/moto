@@ -1,0 +1,44 @@
+#!/bin/bash
+# moto-reboot-recovery — runs once on boot to bring everything back.
+# Enabled as moto-reboot-recovery.service, starts after docker + network.
+
+set -u
+LOG="/var/log/moto-reboot-recovery.log"
+log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" | tee -a "$LOG" >/dev/null; }
+
+log "moto-reboot-recovery starting"
+
+# 1. Wait up to 90s for the Mac to come back (reverse tunnel up).
+log "waiting for Mac reverse tunnel..."
+for i in $(seq 1 30); do
+  if ssh -o BatchMode=yes -o ConnectTimeout=3 mac 'echo ok' 2>/dev/null | grep -q ok; then
+    log "mac reachable after ${i} tries"
+    break
+  fi
+  sleep 3
+done
+
+# 2. Remount SSHFS (even if Mac not up yet — timer will retry every 30s).
+log "checking mac mounts"
+/usr/local/bin/check-mac-mounts || log "mounts not up yet; timer will retry"
+sleep 2
+/usr/local/bin/check-mac-mounts || true
+
+# 3. Ensure docker compose stack is up
+if [[ -d /opt/moto/server/docker ]]; then
+  log "docker compose up -d"
+  cd /opt/moto/server/docker && docker compose up -d --remove-orphans 2>&1 | tee -a "$LOG" >/dev/null
+fi
+
+# 4. Ensure authenticated-chrome is responsive; if not, kick it.
+for i in 1 2 3; do
+  if curl -sS --max-time 5 http://127.0.0.1:9222/json/version >/dev/null 2>&1; then
+    log "CDP up"
+    break
+  fi
+  log "CDP not up (try $i) — restarting authenticated-chrome"
+  systemctl restart authenticated-chrome.service
+  sleep 10
+done
+
+log "moto-reboot-recovery done"

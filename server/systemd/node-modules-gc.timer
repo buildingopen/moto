@@ -1,0 +1,10 @@
+[Unit]
+Description=moto — nightly node_modules + orphan cleanup
+
+[Timer]
+OnCalendar=*-*-* 04:12:00
+Persistent=true
+Unit=node-modules-gc.service
+
+[Install]
+WantedBy=timers.target

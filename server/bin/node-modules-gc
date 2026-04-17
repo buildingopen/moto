@@ -1,0 +1,54 @@
+#!/bin/bash
+# node-modules-gc — delete node_modules/ directories that haven't been touched
+# in $NODE_MODULES_GC_DAYS days (default 14).
+#
+# Skips anything under $NODE_MODULES_GC_PROTECT (colon-separated paths).
+
+set -u
+LOG="/var/log/node-modules-gc.log"
+
+if [[ -f /opt/moto/.env ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source /opt/moto/.env
+  set +a
+fi
+
+: "${NODE_MODULES_GC_DAYS:=14}"
+: "${NODE_MODULES_GC_ROOTS:=/root /home}"
+: "${NODE_MODULES_GC_PROTECT:=}"
+
+log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"; }
+
+protect_clause=()
+IFS=: read -ra protect_paths <<< "$NODE_MODULES_GC_PROTECT"
+for p in "${protect_paths[@]}"; do
+  [[ -n "$p" ]] && protect_clause+=(-not -path "$p/*")
+done
+
+freed_kb=0
+count=0
+
+# shellcheck disable=SC2086
+while IFS= read -r dir; do
+  [[ -z "$dir" ]] && continue
+  size_kb=$(du -sk "$dir" 2>/dev/null | cut -f1)
+  rm -rf "$dir" 2>/dev/null || continue
+  freed_kb=$(( freed_kb + size_kb ))
+  count=$(( count + 1 ))
+  log "removed $dir (${size_kb}K)"
+done < <(find $NODE_MODULES_GC_ROOTS \
+             -maxdepth 6 \
+             -type d -name node_modules \
+             "${protect_clause[@]}" \
+             -atime "+${NODE_MODULES_GC_DAYS}" \
+             -prune 2>/dev/null)
+
+if (( count > 0 )); then
+  log "removed $count node_modules dirs, freed $((freed_kb / 1024)) MB"
+fi
+
+# Rotate log
+if [[ -f "$LOG" ]] && (( $(wc -l < "$LOG") > 500 )); then
+  tail -200 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+fi

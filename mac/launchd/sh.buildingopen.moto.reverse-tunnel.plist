@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>sh.buildingopen.moto.reverse-tunnel</string>
+
+  <!--
+    Keeps a reverse SSH tunnel alive from this Mac to the server so the server
+    can SSH back (and sshfs-mount the Mac's filesystem / ~/.claude).
+
+    Server-side then uses: Host mac → HostName localhost, Port __MAC_REVERSE_PORT__
+  -->
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/ssh</string>
+    <string>-N</string>
+    <string>-T</string>
+    <string>-o</string><string>ExitOnForwardFailure=yes</string>
+    <string>-o</string><string>ServerAliveInterval=30</string>
+    <string>-o</string><string>ServerAliveCountMax=3</string>
+    <string>-o</string><string>StrictHostKeyChecking=accept-new</string>
+    <string>-R</string><string>__MAC_REVERSE_PORT__:localhost:22</string>
+    <string>__AX41_USER__@__AX41_HOST__</string>
+  </array>
+
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key>
+  <dict>
+    <key>NetworkState</key><true/>
+    <key>SuccessfulExit</key><false/>
+  </dict>
+  <key>ThrottleInterval</key><integer>10</integer>
+
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/moto-reverse-tunnel.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/moto-reverse-tunnel.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+</dict>
+</plist>

@@ -1,0 +1,24 @@
+#!/bin/bash
+# cs — tmux launcher for Claude Code sessions.
+# Usage: cs [project/task] [-CC]
+#
+# If a session with the same name exists, attach. Otherwise create a new one
+# running Claude Code in non-interactive permission mode.
+
+INPUT="${1:-main/main}"
+MODE="${2:-}"
+[[ "$INPUT" != *"/"* ]] && INPUT="$INPUT/main"
+
+# Detach any existing clients attached to this session (so the incoming one takes over cleanly).
+tmux list-clients -t "$INPUT" -F "#{client_name}" 2>/dev/null | while read -r c; do
+    tmux detach-client -t "$c" 2>/dev/null
+done
+sleep 0.5
+
+if [[ "$MODE" == "-CC" ]]; then
+    tmux -CC new-session -A -s "$INPUT" -n "$INPUT" \
+      "ENABLE_BACKGROUND_TASKS=1 claude --permission-mode dontAsk"
+else
+    tmux new-session -A -s "$INPUT" -n "$INPUT" \
+      "ENABLE_BACKGROUND_TASKS=1 claude --permission-mode dontAsk"
+fi

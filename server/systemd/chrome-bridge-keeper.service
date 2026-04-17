@@ -1,0 +1,17 @@
+[Unit]
+Description=moto — Chrome CDP keepalive
+After=authenticated-chrome.service
+Wants=authenticated-chrome.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/chrome-bridge-keeper
+Restart=always
+RestartSec=10
+Environment=HOME=/root
+Environment=USER=root
+Environment=DISPLAY=:98
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+[Install]
+WantedBy=multi-user.target

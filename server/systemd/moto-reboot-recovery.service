@@ -1,0 +1,17 @@
+[Unit]
+Description=moto — restore full stack after reboot
+After=network-online.target docker.service tmux-server.service
+Wants=network-online.target docker.service
+Before=authenticated-chrome.service
+# Run only once after boot.
+ConditionPathExists=!/run/moto-reboot-recovery.done
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/moto-reboot-recovery
+ExecStartPost=/bin/touch /run/moto-reboot-recovery.done
+TimeoutStartSec=5min
+
+[Install]
+WantedBy=multi-user.target

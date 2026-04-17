@@ -1,0 +1,14 @@
+[Unit]
+Description=moto — authenticated Chrome with CDP exposed on :9222
+After=network.target
+Documentation=https://github.com/buildingopen/moto/blob/main/docs/browser-login.md
+
+[Service]
+Type=simple
+ExecStart=/root/authenticated-browser/chrome-launcher.sh
+Restart=on-failure
+RestartSec=5
+Environment=TZ=Europe/Berlin
+
+[Install]
+WantedBy=multi-user.target

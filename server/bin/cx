@@ -1,0 +1,35 @@
+#!/bin/bash
+# cx — tmux launcher for Codex CLI sessions.
+# Refuses to attach if the session name exists but runs a different agent.
+INPUT="${1:-main/main}"
+MODE="${2:-}"
+TOOL="codex"
+[[ "$INPUT" != *"/"* ]] && INPUT="$INPUT/main"
+
+if tmux has-session -t "$INPUT" 2>/dev/null; then
+    pid=$(tmux list-panes -t "$INPUT" -F "#{pane_pid}" 2>/dev/null | head -1)
+    cmd=$(ps -o comm= -p "$pid" 2>/dev/null)
+    cmdline=$(ps -o args= -p "$pid" 2>/dev/null)
+    if [[ "$cmd" == "node" ]] && [[ "$cmdline" == *codex* ]]; then
+        running="codex"
+    elif [[ "$cmd" == "opencode" ]]; then running="opencode"
+    elif [[ "$cmd" == "claude" ]]; then  running="claude"
+    else                                 running="$cmd"
+    fi
+    if [[ "$running" != "$TOOL" ]]; then
+        echo "Error: session \"$INPUT\" is running $running, not $TOOL" >&2
+        echo "Use the matching command, or close the session first." >&2
+        exit 1
+    fi
+fi
+
+tmux list-clients -t "$INPUT" -F "#{client_name}" 2>/dev/null | while read -r c; do
+    tmux detach-client -t "$c" 2>/dev/null
+done
+sleep 0.5
+
+if [[ "$MODE" == "-CC" ]]; then
+    tmux -CC new-session -A -s "$INPUT" -n "$INPUT" "codex --dangerously-bypass-approvals-and-sandbox"
+else
+    tmux new-session -A -s "$INPUT" -n "$INPUT" "codex --dangerously-bypass-approvals-and-sandbox"
+fi

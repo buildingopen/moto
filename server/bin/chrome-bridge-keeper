@@ -1,0 +1,30 @@
+#!/bin/bash
+# chrome-bridge-keeper — watches authenticated-chrome CDP and restarts it if it stalls.
+#
+# Runs under chrome-bridge-keeper.service.
+
+set -u
+LOG="${LOG:-/var/log/chrome-bridge-keeper.log}"
+CDP_URL="http://127.0.0.1:9222/json/version"
+FAIL_COUNT=0
+FAIL_THRESHOLD=3
+
+log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" | tee -a "$LOG" >/dev/null; }
+
+log "chrome-bridge-keeper starting"
+
+while true; do
+  if curl -sS --max-time 5 "$CDP_URL" >/dev/null 2>&1; then
+    FAIL_COUNT=0
+  else
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+    log "CDP unreachable (fail $FAIL_COUNT/$FAIL_THRESHOLD)"
+    if (( FAIL_COUNT >= FAIL_THRESHOLD )); then
+      log "restarting authenticated-chrome.service"
+      systemctl restart authenticated-chrome.service
+      FAIL_COUNT=0
+      sleep 15
+    fi
+  fi
+  sleep 10
+done
