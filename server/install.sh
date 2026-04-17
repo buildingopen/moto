@@ -17,22 +17,38 @@ set -a; source .env; set +a
 : "${MAC_REVERSE_PORT:=2222}"
 : "${NODE_MODULES_GC_DAYS:=14}"
 
+# Test / staged-install flags. All default to off (= do everything).
+#   SKIP_OS_INSTALL=1        skip apt-get install of tmux/socat/chrome/docker
+#   SKIP_DOCKER_COMPOSE=1    don't run `docker compose up` at the end
+#   SKIP_SYSTEMD_ENABLE=1    don't `systemctl enable/start` units (just install them)
+#   FORCE=1                  overwrite existing files without backup
+: "${SKIP_OS_INSTALL:=0}"
+: "${SKIP_DOCKER_COMPOSE:=0}"
+: "${SKIP_SYSTEMD_ENABLE:=0}"
+
 echo "━━━ moto server install ━━━"
-echo "  mac user:        $MAC_USER"
-echo "  reverse port:    $MAC_REVERSE_PORT"
+echo "  mac user:              $MAC_USER"
+echo "  reverse port:          $MAC_REVERSE_PORT"
+echo "  SKIP_OS_INSTALL:       $SKIP_OS_INSTALL"
+echo "  SKIP_DOCKER_COMPOSE:   $SKIP_DOCKER_COMPOSE"
+echo "  SKIP_SYSTEMD_ENABLE:   $SKIP_SYSTEMD_ENABLE"
 echo
 
 # ── 1. OS packages ──────────────────────────────────────────────────
-echo "→ installing OS packages..."
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get install -y -qq \
-  tmux socat sshfs fuse3 \
-  xvfb curl wget jq \
-  earlyoom \
-  ca-certificates gnupg lsb-release \
-  rsync \
-  iproute2
+if [[ "$SKIP_OS_INSTALL" != "1" ]]; then
+  echo "→ installing OS packages..."
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -qq
+  apt-get install -y -qq \
+    tmux socat sshfs fuse3 \
+    xvfb curl wget jq \
+    earlyoom \
+    ca-certificates gnupg lsb-release \
+    rsync \
+    iproute2
+else
+  echo "→ SKIP_OS_INSTALL=1 — skipping apt-get"
+fi
 
 # Disable systemd-oomd if present — earlyoom is what we enable, and running
 # both OOM-killers simultaneously leads to unpredictable kills. tmux-server's
@@ -45,7 +61,7 @@ if systemctl list-unit-files 2>/dev/null | grep -q '^systemd-oomd\.service'; the
 fi
 
 # ── 2. Docker (if missing) ──────────────────────────────────────────
-if ! command -v docker >/dev/null; then
+if [[ "$SKIP_OS_INSTALL" != "1" ]] && ! command -v docker >/dev/null; then
   echo "→ installing Docker..."
   install -m 0755 -d /etc/apt/keyrings
   curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
@@ -58,7 +74,7 @@ if ! command -v docker >/dev/null; then
 fi
 
 # ── 3. Google Chrome (for authenticated-chrome) ─────────────────────
-if ! command -v google-chrome-stable >/dev/null; then
+if [[ "$SKIP_OS_INSTALL" != "1" ]] && ! command -v google-chrome-stable >/dev/null; then
   echo "→ installing Google Chrome..."
   wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
   apt-get install -y -qq /tmp/chrome.deb
@@ -157,29 +173,36 @@ for unit in server/systemd/*.service server/systemd/*.timer; do
   cp "$unit" "$dst"
 done
 
-systemctl daemon-reload
+if [[ "$SKIP_SYSTEMD_ENABLE" == "1" ]]; then
+  echo "→ SKIP_SYSTEMD_ENABLE=1 — units installed but not enabled/started"
+else
+  systemctl daemon-reload
 
-# Enable + start
-for unit in \
-  tmux-server.service \
-  authenticated-chrome.service \
-  chrome-bridge-keeper.service \
-  cdp-docker-proxy.service \
-  mac-mount-check.timer \
-  moto-cleanup.timer \
-  node-modules-gc.timer \
-  moto-reboot-recovery.service \
-  earlyoom.service; do
-  systemctl enable "$unit" 2>/dev/null || true
-  # Only start timers/services that are safe to (re)start now
-  case "$unit" in
-    *.timer|earlyoom.service|tmux-server.service|cdp-docker-proxy.service|authenticated-chrome.service|chrome-bridge-keeper.service)
-      systemctl restart "$unit" 2>/dev/null || true
-      ;;
-  esac
-done
+  # Enable + start
+  for unit in \
+    tmux-server.service \
+    authenticated-chrome.service \
+    chrome-bridge-keeper.service \
+    cdp-docker-proxy.service \
+    mac-mount-check.timer \
+    moto-cleanup.timer \
+    node-modules-gc.timer \
+    moto-reboot-recovery.service \
+    earlyoom.service; do
+    systemctl enable "$unit" 2>/dev/null || true
+    # Only start timers/services that are safe to (re)start now
+    case "$unit" in
+      *.timer|earlyoom.service|tmux-server.service|cdp-docker-proxy.service|authenticated-chrome.service|chrome-bridge-keeper.service)
+        systemctl restart "$unit" 2>/dev/null || true
+        ;;
+    esac
+  done
+fi
 
 # ── 8. Docker compose stack ─────────────────────────────────────────
+if [[ "$SKIP_DOCKER_COMPOSE" == "1" ]]; then
+  echo "→ SKIP_DOCKER_COMPOSE=1 — skipping docker compose up"
+else
 echo "→ preflight: port availability..."
 declare -A want_ports=(
   ["3001"]="runtime-api"
@@ -209,10 +232,15 @@ else
   docker compose up -d --remove-orphans
   cd "$MOTO_DIR"
 fi
+fi
 
 # ── 9. Initial mount attempt ────────────────────────────────────────
-echo "→ attempting initial SSHFS mount of Mac..."
-/usr/local/bin/check-mac-mounts || true
+if [[ "$SKIP_SYSTEMD_ENABLE" == "1" ]]; then
+  echo "→ SKIP_SYSTEMD_ENABLE=1 — skipping initial mount attempt"
+else
+  echo "→ attempting initial SSHFS mount of Mac..."
+  /usr/local/bin/check-mac-mounts || true
+fi
 
 echo
 echo "✓ moto server install complete."

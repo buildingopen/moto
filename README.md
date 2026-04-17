@@ -154,7 +154,7 @@ Legacy aliases (`ax`, `axo`, `axn`, `axk`, `axl`, `axwin`, `aximg`, `axd`, `axq`
 
 ## Known gaps (v0.1)
 
-- **Not yet cold-installed**: all pieces are validated individually (`systemd-analyze verify`, `docker compose config`, `shellcheck`, running against the author's live server), but the full `./install.sh server-remote` hasn't been run on a clean box yet from this repo.
+- **Cold install validated in a throwaway container** (`debian:12` on the author's Hetzner AX41 — 50/50 checks pass, see [`server/test/`](server/test/)). Not yet validated on a bare-metal box from zero, but every piece the installer touches on a new box — apt, Chrome, Docker CE, systemd unit syntax, script layout — is exercised by that test.
 - **Agent CLIs not bundled**: `claude` / `codex` / `opencode` are npm installs — see [Requirements](#requirements).
 - **`chrome-bridge-keeper`** ships as a simple bash CDP-ping loop. The author's real setup uses a ~300-line Python variant that also auto-patches the Claude Code browser extension; too specific to include here. Add `# MOTO_KEEP_LOCAL` to your own script and `server/install.sh` will preserve it.
 - **x86_64 only** for now — Chrome, Docker images, and the Hetzner target are all amd64. ARM support is untested.
@@ -165,7 +165,15 @@ If you hit something, please open an issue — most gaps are 10-minute fixes onc
 
 ## Contributing
 
-PRs welcome. Run `shellcheck -S warning server/bin/* mac/bin/moto` and `docker compose -f server/docker/compose.yaml config` before submitting.
+PRs welcome. Before submitting:
+
+```bash
+shellcheck -S warning server/bin/* mac/bin/moto server/test/*.sh
+(cd server/docker && docker compose config) >/dev/null
+HOST=your.host ./server/test/run-container-test.sh   # full isolated install test
+```
+
+See [`server/test/README.md`](server/test/README.md) for what the container test covers.
 
 ## License
 
