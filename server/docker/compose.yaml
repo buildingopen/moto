@@ -1,0 +1,92 @@
+# moto — container stack.
+#
+# Services:
+#   proxy        — residential IP egress (3proxy; reads PROXY_URL from .env)
+#   runtime-api  — Node code execution sandbox (renders, API mocks, localhost)
+#   dev-sandbox  — sshd + node for interactive use (:2223)
+#   cloudflared  — outbound public hostnames for your dev servers (optional)
+#
+# All services `restart: unless-stopped` so they survive reboots.
+
+name: moto
+
+networks:
+  moto-net:
+    driver: bridge
+  # Shared bridge where CDP is exposed (host-side socat listens on 172.17.0.1:9222).
+  default-docker:
+    external: true
+    name: bridge
+
+services:
+
+  # ── Residential IP proxy egress ───────────────────────────────────
+  # Built locally from ./proxy/ (tinyproxy) so the entrypoint can parse
+  # PROXY_URL into a real `upstream` directive at container start.
+  # HTTP forward proxy on :8118. No SOCKS5 listener in v0.1 — run a
+  # separate tool if you need one locally.
+  proxy:
+    build: ./proxy
+    image: moto-proxy:local
+    container_name: moto-proxy
+    restart: unless-stopped
+    profiles: ["proxy"]
+    environment:
+      PROXY_URL: "${PROXY_URL:-}"
+    networks:
+      - moto-net
+    # Bound to loopback only — never exposed to the internet.
+    ports:
+      - "127.0.0.1:8118:8118"
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "8118"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ── Code execution sandbox ────────────────────────────────────────
+  runtime-api:
+    build: ./runtime-api
+    container_name: moto-runtime-api
+    restart: unless-stopped
+    environment:
+      HTTP_PROXY: "${RUNTIME_HTTP_PROXY:-}"
+      HTTPS_PROXY: "${RUNTIME_HTTP_PROXY:-}"
+      NO_PROXY: "localhost,127.0.0.1,172.17.0.1"
+    ports:
+      - "127.0.0.1:3001:3001"
+    networks:
+      - moto-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+
+  # ── Dev sandbox (SSH in as root@ax41 -p 2223) ─────────────────────
+  dev-sandbox:
+    build: ./dev-sandbox
+    container_name: moto-dev-sandbox
+    restart: unless-stopped
+    hostname: dev-sandbox
+    ports:
+      - "2223:22"
+    volumes:
+      - dev-sandbox-home:/root
+      # Seeds authorized_keys from the host root user's public key on first boot.
+      # Read-only, so the container cannot write back to the host.
+      - /root/.ssh:/host-ssh:ro
+    networks:
+      - moto-net
+
+  # ── Cloudflare tunnel (optional public hostnames) ─────────────────
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: moto-cloudflared
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    network_mode: host
+
+volumes:
+  dev-sandbox-home:

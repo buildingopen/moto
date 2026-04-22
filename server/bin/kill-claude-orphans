@@ -1,0 +1,14 @@
+#!/bin/bash
+# kill-claude-orphans — nightly kill of long-running orphan dev servers.
+# Installed as /etc/cron.daily/ or run via node-modules-gc.timer.
+
+set -u
+find /proc -maxdepth 1 -name "[0-9]*" -type d 2>/dev/null | while read -r p; do
+  pid=$(basename "$p")
+  cmd=$(tr '\0' ' ' < "$p/cmdline" 2>/dev/null)
+  echo "$cmd" | grep -qE "http\.server|tsx watch|next dev|vite --" || continue
+  age=$(( $(date +%s) - $(stat -c %Y "$p" 2>/dev/null || echo 0) ))
+  if (( age > 86400 )); then
+    kill "$pid" 2>/dev/null && echo "killed orphan (${age}s old): $cmd"
+  fi
+done

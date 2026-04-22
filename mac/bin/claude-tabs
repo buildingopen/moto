@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# claude-tabs - open or restore remote tmux sessions as iTerm tabs
+# claude-tabs - compatibility wrapper around the integrated moto CLI
 #
 # Usage:
 #   claude-tabs up
@@ -11,129 +11,13 @@
 
 set -euo pipefail
 
-SSH_HOST="${CLAUDE_REMOTE_SSH_HOST:-ax41}"
-CLAUDE_LAUNCHER="${CLAUDE_REMOTE_CLAUDE_LAUNCHER:-./cs}"
-CODEX_LAUNCHER="${CLAUDE_REMOTE_CODEX_LAUNCHER:-./cx}"
+SELF_BIN="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || python3 -c "import os,sys;print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}")"
+REPO_DIR="$(cd "$(dirname "$SELF_BIN")/../.." && pwd)"
+MOTO_BIN="$REPO_DIR/mac/bin/moto"
 
-c_reset=$'\e[0m'
-c_green=$'\e[32m'
-c_red=$'\e[31m'
-c_blue=$'\e[34m'
+if [[ ! -x "$MOTO_BIN" ]]; then
+    echo "claude-tabs: could not find moto at $MOTO_BIN" >&2
+    exit 1
+fi
 
-die() { printf '%s✗%s %s\n' "$c_red" "$c_reset" "$*" >&2; exit 1; }
-ok()  { printf '%s✓%s %s\n' "$c_green" "$c_reset" "$*"; }
-info(){ printf '%s•%s %s\n' "$c_blue" "$c_reset" "$*"; }
-
-ssh_remote() {
-    ssh -o ConnectTimeout=8 -o ServerAliveInterval=20 -o ServerAliveCountMax=3 \
-        "$SSH_HOST" "$@"
-}
-
-normalize_session() {
-    local session="${1:-main/main}"
-    [[ "$session" != */* ]] && session="$session/main"
-    [[ "$session" =~ ^[A-Za-z0-9._/-]+$ ]] || die "invalid session name: $session"
-    printf '%s' "$session"
-}
-
-iterm_open_tab() {
-    local cmd="$1"
-    osascript <<EOF 2>/dev/null
-tell application "iTerm"
-    activate
-    set mainWin to missing value
-    set maxTabs to 0
-    repeat with w in windows
-        set tabCount to count of tabs of w
-        if tabCount > maxTabs then
-            set maxTabs to tabCount
-            set mainWin to w
-        end if
-    end repeat
-    if mainWin is not missing value and maxTabs > 0 then
-        tell mainWin to create tab with default profile
-        tell current session of mainWin to write text "$cmd"
-    else
-        set w to (create window with default profile)
-        tell current session of w to write text "$cmd"
-    end if
-end tell
-EOF
-}
-
-open_remote_session() {
-    local launcher="$1"
-    local session="$2"
-    local ssh_cmd="ssh -o ConnectTimeout=8 -o ServerAliveInterval=20 -t $SSH_HOST $launcher '$session' -CC"
-    iterm_open_tab "$ssh_cmd"
-}
-
-cmd_new() {
-    local tool="${1:-claude}"
-    local session
-    local launcher
-
-    session="$(normalize_session "${2:-}")"
-    case "$tool" in
-        claude) launcher="$CLAUDE_LAUNCHER" ;;
-        codex) launcher="$CODEX_LAUNCHER" ;;
-        *) die "unknown tool: $tool" ;;
-    esac
-
-    open_remote_session "$launcher" "$session"
-    ok "opened $session ($tool)"
-}
-
-cmd_attach() {
-    cmd_new claude "$@"
-}
-
-cmd_up() {
-    local sessions
-    local count=0
-
-    info "listing remote tmux sessions..."
-    sessions="$(ssh_remote 'tmux list-sessions -F "#{session_activity}|#{session_name}" 2>/dev/null | grep "/" | sort -rn | cut -d"|" -f2' || true)"
-    [[ -n "$sessions" ]] || die "no remote sessions found on $SSH_HOST"
-
-    while IFS= read -r session; do
-        [[ -n "$session" ]] || continue
-        session="$(normalize_session "$session")"
-        open_remote_session "$CLAUDE_LAUNCHER" "$session"
-        count=$((count + 1))
-        sleep 0.4
-    done <<< "$sessions"
-
-    ok "opened $count session tab(s)"
-}
-
-cmd_ls() {
-    ssh_remote "tmux list-sessions -F '#{session_name}  [#{session_windows}w, attached=#{session_attached}]' 2>/dev/null" | sort
-}
-
-cmd_kill() {
-    local session
-    session="$(normalize_session "${1:?usage: claude-tabs kill NAME}")"
-    ssh_remote "tmux kill-session -t '$session'"
-    ok "killed $session"
-}
-
-main() {
-    local sub="${1:-}"
-    [[ -n "$sub" ]] && shift || true
-
-    case "$sub" in
-        up) cmd_up "$@" ;;
-        new) cmd_new claude "$@" ;;
-        newx) cmd_new codex "$@" ;;
-        attach|a) cmd_attach "$@" ;;
-        ls|list) cmd_ls ;;
-        kill|k) cmd_kill "$@" ;;
-        help|-h|--help|"")
-            sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'
-            ;;
-        *) die "unknown subcommand: $sub" ;;
-    esac
-}
-
-main "$@"
+exec "$MOTO_BIN" "$@"

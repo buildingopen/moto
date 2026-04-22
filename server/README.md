@@ -1,15 +1,33 @@
-# Server Setup for Claude Code Dev Server
+# Server Setup for the Integrated Remote Workflow
 
-This directory contains the reusable server-side building blocks that sit under the full `claude-setup` configuration. Use them directly if you want to assemble your own remote workflow around the canonical `~/.claude` setup from this repo.
+This directory contains the Linux-side runtime for the full `claude-setup` remote workflow. The recommended install path is from the repo root:
 
-> 🛵 **Want the specialized remote layer?** [moto](https://github.com/buildingopen/moto) sits on top of `claude-setup`: it keeps this repo's installed `~/.claude` as the source of truth, packages the core Mac/server tab workflow shipped here, then adds reverse tunnel + SSHFS wiring, health/status, and one-command session restore (`moto up`).
+```bash
+cp .env.example .env
+$EDITOR .env
+./install.sh server-remote
+```
 
-## When to use what
+That syncs this repo to `AX41_HOST:/opt/moto` by default and runs [`server/install.sh`](install.sh) remotely as root.
 
-- **`claude-setup` root** - Canonical Claude config (`~/.claude`), hooks, skills, scripts, and shared patterns
-- **`server/`** - Lower-level Linux server primitives you can cherry-pick or adapt, including `server/bin/cs` and `server/bin/cx` session launchers
-- **`mac/`** - iTerm tab/session opener that targets those launchers from your Mac
-- **`moto`** - Opinionated remote workstation built on top of both
+If you are already on the Linux box, run:
+
+```bash
+bash server/install.sh
+```
+
+The installer keeps `/opt/moto` as the default runtime path for compatibility with the bundled helpers and systemd units, even when the checkout lives somewhere else.
+
+## What lives here
+
+- `bin/` - tmux launchers (`cs`, `cx`, `co`) plus maintenance helpers
+- `browser/` - authenticated Chrome launcher and profile backup helpers
+- `docker/` - runtime API, proxy, sandbox, and optional tunnel compose stack
+- `systemd/` - units and timers for tmux, Chrome, cleanup, reboot recovery, and mount health
+- `terminal/` - tmux config and queue helpers
+- `test/` - smoke-test helpers for the server-side runtime
+
+Pair this with [`mac/bin/moto`](../mac/bin/moto) on the Mac. [`mac/bin/claude-tabs`](../mac/bin/claude-tabs) remains available as a compatibility wrapper.
 
 ## Prerequisites
 
@@ -22,75 +40,42 @@ This directory contains the reusable server-side building blocks that sit under 
 - Python 3.9+ with `websocket-client` (`pip install websocket-client`)
 - `tmux` (`apt install tmux`)
 
-## Directory Structure
+## What `server/install.sh` installs
 
-```
-server/
-  bin/              Remote session launchers (cs, cx)
-  systemd/          Systemd unit files for Chrome, SSHFS mounts, health checks
-  safety/           Memory-capped execution wrappers (safe-pipeline, safe-run)
-  browser/          Chrome CDP setup, keepalive daemon
-  sshfs/            Remote filesystem mount scripts
-  multi-account/    gh, render, supabase account switching patterns
-  terminal/         tmux config, Claude queue workflow
-  tmux.conf         Drop-in tmux configuration
-  bashrc            Generic .bashrc with useful patterns
-```
+- `/root/cs`, `/root/cx`, `/root/co` plus the maintenance helpers under `/usr/local/bin`
+- `Host mac` SSH config on the server, backed by the reverse tunnel from your Mac
+- `/mnt/mac` and `/mnt/mac-claude` SSHFS mount points
+- systemd units for `tmux-server`, `authenticated-chrome`, cleanup timers, reboot recovery, and mount health
+- Docker compose services from [`server/docker/`](docker/)
+- authenticated Chrome helpers under `/root/authenticated-browser`
 
-## Quick Deploy
+After install, your normal entry point is from the Mac:
 
-### 1. Install safety wrappers
 ```bash
-cp safety/safe-pipeline /usr/local/bin/safe-pipeline
-cp safety/safe-run /usr/local/bin/safe-run
-cp safety/kill-stale-tests.sh /usr/local/bin/kill-stale-tests.sh
-chmod +x /usr/local/bin/safe-pipeline /usr/local/bin/safe-run /usr/local/bin/kill-stale-tests.sh
-cp safety/memory-guard.slice /etc/systemd/system/memory-guard.slice
+moto doctor
+moto new hello/world
+moto up
+```
+
+## Manual / cherry-pick install
+
+If you do not want the full packaged workflow, you can still reuse pieces from this directory directly.
+
+### Install just the tmux launchers
+
+```bash
+cp bin/cs /root/cs
+cp bin/cx /root/cx
+cp bin/co /root/co
+chmod +x /root/cs /root/cx /root/co
+```
+
+### Install just the systemd units
+
+```bash
+cp systemd/*.service systemd/*.timer /etc/systemd/system/
 systemctl daemon-reload
 ```
-
-### 2. Install Chrome services
-```bash
-cp systemd/chrome-headless.service /etc/systemd/system/
-cp systemd/chrome-bridge-keeper.service /etc/systemd/system/
-# Edit unit files to set your CHROME_PROFILE_DIR and CDP_PORT
-systemctl daemon-reload
-systemctl enable --now chrome-headless chrome-bridge-keeper
-```
-
-### 3. Install SSHFS mount (optional, for multi-machine setups)
-```bash
-cp systemd/sshfs-mount.service /etc/systemd/system/
-# Edit: set REMOTE_HOST, REMOTE_PATH, LOCAL_MOUNT_POINT
-systemctl daemon-reload
-systemctl enable --now sshfs-mount
-cp systemd/mount-check.service /etc/systemd/system/
-cp systemd/mount-check.timer /etc/systemd/system/
-systemctl enable --now mount-check.timer
-```
-
-### 4. Install browser keepalive
-```bash
-cp browser/chrome-bridge-keeper.py /usr/local/bin/chrome-bridge-keeper
-chmod +x /usr/local/bin/chrome-bridge-keeper
-cp systemd/chrome-bridge-keeper.service /etc/systemd/system/
-systemctl enable --now chrome-bridge-keeper
-```
-
-### 5. Terminal workflow
-```bash
-cp terminal/tmux.conf ~/.tmux.conf
-# Add useful aliases from terminal/ scripts to your ~/.bashrc
-```
-
-### 6. Install remote session launchers
-```bash
-cp bin/cs ~/cs
-cp bin/cx ~/cx
-chmod +x ~/cs ~/cx
-```
-
-These pair with [`mac/bin/claude-tabs`](../mac/bin/claude-tabs) on your Mac to open remote tmux sessions as iTerm tabs.
 
 ## Key Concepts
 

@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# co — tmux launcher for opencode sessions.
+
+set -euo pipefail
+
+INPUT="${1:-main/main}"
+MODE="${2:-}"
+TOOL="opencode"
+RUNTIME_DIR="${MOTO_RUNTIME_DIR:-/opt/moto}"
+[[ "$INPUT" != *"/"* ]] && INPUT="$INPUT/main"
+[[ "$INPUT" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "invalid session name: $INPUT" >&2; exit 1; }
+
+if tmux has-session -t "$INPUT" 2>/dev/null; then
+    pid=$(tmux list-panes -t "$INPUT" -F "#{pane_pid}" 2>/dev/null | head -1)
+    cmd=$(ps -o comm= -p "$pid" 2>/dev/null)
+    cmdline=$(ps -o args= -p "$pid" 2>/dev/null)
+    if [[ "$cmd" == "node" ]] && [[ "$cmdline" == *codex* ]]; then running="codex"
+    elif [[ "$cmd" == "opencode" ]]; then running="opencode"
+    elif [[ "$cmd" == "claude" ]]; then  running="claude"
+    else                                 running="$cmd"
+    fi
+    if [[ "$running" != "$TOOL" ]]; then
+        echo "Error: session \"$INPUT\" is running $running, not $TOOL" >&2
+        exit 1
+    fi
+fi
+
+tmux list-clients -t "$INPUT" -F "#{client_name}" 2>/dev/null | while read -r c; do
+    tmux detach-client -t "$c" 2>/dev/null
+done
+sleep 0.5
+
+# opencode uses Gemini by default; source the server .env if present so the key flows in.
+if [[ -f "$RUNTIME_DIR/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$RUNTIME_DIR/.env"
+  set +a
+fi
+
+if [[ "$MODE" == "-CC" ]]; then
+    tmux -CC new-session -A -s "$INPUT" -n "$INPUT" "opencode"
+else
+    tmux new-session -A -s "$INPUT" -n "$INPUT" "opencode"
+fi

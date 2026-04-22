@@ -1,54 +1,48 @@
 # Mac iTerm Workflow
 
-This directory contains the Mac-side pieces for the AX41-style remote session workflow:
+This directory contains the Mac-side control plane for the integrated remote workflow in this repo:
 
-- Open new Claude or Codex sessions as tabs in iTerm
-- Re-open all remote tmux sessions into tabs
-- Keep the command surface small enough to copy into an existing setup
+- Open new Claude, Codex, or OpenCode sessions as tabs in iTerm
+- Restore all active remote tmux sessions into one iTerm window
+- Manage the reverse tunnel and the Mac-side shell/SSH wiring
 
 ## What ships here
 
-- `bin/claude-tabs` - CLI for opening, restoring, listing, and killing remote sessions
-- `install.sh` - links the CLI into `~/.local/bin` and installs zsh aliases
-- `shell/20-sessions.zsh` - `ax`, `axo`, `axl`, `axk`, `axc` wrappers
-- `ssh/config.d/claude-remote.conf` - SSH config template with ControlMaster enabled
-
-## Server-side requirements
-
-On the remote box, install the matching tmux launchers from this repo:
-
-```bash
-scp server/bin/cs server/bin/cx ax41:~/
-ssh ax41 'chmod +x ~/cs ~/cx'
-```
-
-Those launchers create-or-attach to tmux sessions with `tmux -CC`, which is what lets iTerm treat them as native tabs.
+- `bin/moto` - primary CLI for opening, restoring, diagnosing, and managing remote sessions
+- `bin/claude-tabs` - compatibility wrapper for the older tab-only command surface
+- `install.sh` - links the CLIs into `~/.local/bin`, installs zsh aliases, SSH config, and the reverse-tunnel launchd agent
+- `shell/*.zsh` - `ax`, `axc`, `axo`, `axk`, `axl`, and related helpers
+- `launchd/sh.buildingopen.moto.reverse-tunnel.plist` - persistent reverse SSH tunnel
+- `ssh/config.d/moto.conf` - SSH config template with ControlMaster enabled
 
 ## Install on the Mac
 
-If you already have an SSH alias such as `Host ax41`, you only need:
+From the repo root:
 
 ```bash
-bash mac/install.sh
+cp .env.example .env
+$EDITOR .env
+./install.sh
+./install.sh mac
 source ~/.zshrc
 ```
 
-If you want the installer to add the SSH alias for you, pass the remote host values:
+At minimum, set:
 
-```bash
-CLAUDE_REMOTE_HOSTNAME=1.2.3.4 \
-CLAUDE_REMOTE_USER=root \
-CLAUDE_REMOTE_SSH_HOST=ax41 \
-bash mac/install.sh
-source ~/.zshrc
-```
+- `MAC_USER`
+- `AX41_HOST`
+- `AX41_USER`
+- `AX41_SSH_KEY` if you do not use `~/.ssh/id_ed25519`
 
 Optional:
 
-- `CLAUDE_REMOTE_SSH_KEY=~/.ssh/id_ed25519`
-- `CLAUDE_REMOTE_BIN_DIR=$HOME/.local/bin`
+- `AX41_SSH_HOST=ax41`
+- `MOTO_BIN_DIR=$HOME/.local/bin`
+- `MAC_REVERSE_PORT=2222`
 
 ## Usage
+
+Shell aliases:
 
 ```bash
 ax project/task      # open Claude as a new tab
@@ -61,6 +55,18 @@ axk project/task     # kill one remote session
 Direct CLI usage:
 
 ```bash
+moto new project/task
+moto newx project/task
+moto newo project/task
+moto up
+moto ls
+moto kill project/task
+moto doctor
+```
+
+Compatibility:
+
+```bash
 claude-tabs new project/task
 claude-tabs newx project/task
 claude-tabs up
@@ -70,8 +76,7 @@ claude-tabs kill project/task
 
 ## Notes
 
-- The helper defaults to SSH host alias `ax41`. Override with `CLAUDE_REMOTE_SSH_HOST`.
+- The CLI defaults to SSH host alias `ax41`. Override with `AX41_SSH_HOST`.
 - Session names are normalized to `project/task`. Passing `project` becomes `project/main`.
 - New sessions open as new tabs in the iTerm window with the most tabs, not as new windows.
-
-If you want the full packaged remote workstation with reverse tunnel, SSHFS, health/status, and recovery, use `moto` on top of this setup.
+- The server-side pieces are installed by [`../server/install.sh`](../server/install.sh) or `./install.sh server-remote` from the repo root.

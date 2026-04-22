@@ -1,0 +1,67 @@
+#!/bin/bash
+# check-mac-mounts — health-check and remount stale Mac SSHFS mounts.
+# Called every 30s by mac-mount-check.timer.
+#
+# Requires:
+#   - /etc/ssh/ssh_config or /root/.ssh/config with `Host mac` → localhost:$MAC_REVERSE_PORT
+#   - Mac LaunchAgent sh.buildingopen.moto.reverse-tunnel keeping the tunnel up
+#   - MAC_USER exported (from the runtime .env, default: /opt/moto/.env)
+
+set -u
+RUNTIME_DIR="${MOTO_RUNTIME_DIR:-/opt/moto}"
+
+# Load env
+if [[ -f "$RUNTIME_DIR/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$RUNTIME_DIR/.env"
+  set +a
+fi
+: "${MAC_USER:=federicodeponte}"
+
+declare -A MOUNTS=(
+  ["/mnt/mac-claude"]="mac:/Users/${MAC_USER}/.claude"
+  ["/mnt/mac"]="mac:/Users/${MAC_USER}"
+)
+
+declare -A TEST_FILES=(
+  ["/mnt/mac-claude"]="CLAUDE.md"
+  ["/mnt/mac"]="Downloads"
+)
+
+exit_code=0
+
+for mnt in "${!MOUNTS[@]}"; do
+  src="${MOUNTS[$mnt]}"
+  test_path="$mnt/${TEST_FILES[$mnt]}"
+
+  # If the test path responds within 3s, mount is healthy.
+  if timeout 3 ls "$test_path" >/dev/null 2>&1; then
+    continue
+  fi
+
+  echo "$(date '+%Y-%m-%d %H:%M:%S') remounting $mnt ($src)"
+  fusermount -u "$mnt" 2>/dev/null
+  sleep 1
+  mkdir -p "$mnt"
+  if ! sshfs \
+       -o StrictHostKeyChecking=no \
+       -o reconnect \
+       -o ServerAliveInterval=15 \
+       -o ServerAliveCountMax=3 \
+       -o allow_other \
+       "$src" "$mnt" 2>&1; then
+    echo "  FAILED to mount (Mac asleep or reverse tunnel down?)"
+    exit_code=1
+    continue
+  fi
+
+  if timeout 3 ls "$test_path" >/dev/null 2>&1; then
+    echo "  OK"
+  else
+    echo "  FAILED verification"
+    exit_code=1
+  fi
+done
+
+exit $exit_code
