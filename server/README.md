@@ -1,8 +1,15 @@
 # Server Setup for Claude Code Dev Server
 
-This directory contains everything needed to turn a dedicated Linux server into a productive Claude Code environment with browser automation, safe execution wrappers, SSHFS mounts, and multi-account tooling.
+This directory contains the reusable server-side building blocks that sit under the full `claude-setup` configuration. Use them directly if you want to assemble your own remote workflow around the canonical `~/.claude` setup from this repo.
 
-> 🛵 **Prefer one command?** [moto](https://github.com/buildingopen/moto) bundles all of the below into `./install.sh server` plus a `moto up` CLI that restores every tmux agent session as a tab in one iTerm window. Use that if you want the reproducible, opinionated path; stick with this directory if you want to cherry-pick the pieces into your own setup.
+> 🛵 **Want the specialized remote layer?** [moto](https://github.com/buildingopen/moto) sits on top of `claude-setup`: it keeps this repo's installed `~/.claude` as the source of truth, packages the core Mac/server tab workflow shipped here, then adds reverse tunnel + SSHFS wiring, health/status, and one-command session restore (`moto up`).
+
+## When to use what
+
+- **`claude-setup` root** - Canonical Claude config (`~/.claude`), hooks, skills, scripts, and shared patterns
+- **`server/`** - Lower-level Linux server primitives you can cherry-pick or adapt, including `server/bin/cs` and `server/bin/cx` session launchers
+- **`mac/`** - iTerm tab/session opener that targets those launchers from your Mac
+- **`moto`** - Opinionated remote workstation built on top of both
 
 ## Prerequisites
 
@@ -19,6 +26,7 @@ This directory contains everything needed to turn a dedicated Linux server into 
 
 ```
 server/
+  bin/              Remote session launchers (cs, cx)
   systemd/          Systemd unit files for Chrome, SSHFS mounts, health checks
   safety/           Memory-capped execution wrappers (safe-pipeline, safe-run)
   browser/          Chrome CDP setup, keepalive daemon
@@ -74,6 +82,15 @@ systemctl enable --now chrome-bridge-keeper
 cp terminal/tmux.conf ~/.tmux.conf
 # Add useful aliases from terminal/ scripts to your ~/.bashrc
 ```
+
+### 6. Install remote session launchers
+```bash
+cp bin/cs ~/cs
+cp bin/cx ~/cx
+chmod +x ~/cs ~/cx
+```
+
+These pair with [`mac/bin/claude-tabs`](../mac/bin/claude-tabs) on your Mac to open remote tmux sessions as iTerm tabs.
 
 ## Key Concepts
 
